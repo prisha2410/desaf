@@ -13,3 +13,7 @@ allfileshas.txt
 *.npz
 *.ckpt
 *.pyc
+
+.venv/
+*.pdf
+*.zip

@@ -4,7 +4,7 @@ SASS-TAD Data Loader
 
 Handles PAN 2023 / 2024 / 2025 and MuLD AO3 datasets.
 
-PAN split strategy (minor project)
+PAN split strategy (minor project) -- LEGACY, see load_pan2025_full below
 -----------------------------------
     PAN provides train (70%) + validation (15%) with ground truth.
     The official test split has NO labels (withheld for competition only).
@@ -18,6 +18,15 @@ PAN split strategy (minor project)
 
     Use load_pan_labeled() to do steps 1+2 in one call.
 
+    NOTE: this was true when this module was first written. The project
+    later obtained the REAL, labeled official PAN 2025 test set (stored at
+    data/raw/pan2025_full/{tier}/test/). For all 2025 work going forward,
+    use load_pan2025_full() below instead -- it reads the actual official
+    train/validation/test folders directly, with no synthetic re-split.
+    PANDataset + split_documents() are kept here for 2023/2024 and any
+    legacy code paths that still need them, but should NOT be used for new
+    2025 experiments.
+
 PAN folder structure (per year, per tier)
 ------------------------------------------
     data/raw/pan{year}/{tier}/
@@ -29,6 +38,13 @@ PAN folder structure (per year, per tier)
             problem-1.txt
             truth-problem-1.json
             ...
+
+    data/raw/pan2025_full/{tier}/{train,validation,test}/
+        problem-1.txt
+        truth-problem-1.json
+        ...
+    (same file format, but this is the REAL official 3-way split,
+    including a labeled test/ folder -- use load_pan2025_full() for this.)
 
 PAN JSON ground truth format
 -----------------------------
@@ -66,7 +82,7 @@ class Document:
                       1 = style change between sentence i and i+1, else 0
                       None only for official PAN test split (we don't use it)
     n_authors       : int or None
-    source          : 'pan2023' | 'pan2024' | 'pan2025' | 'muld_ao3'
+    source          : 'pan2023' | 'pan2024' | 'pan2025' | 'pan2025_full' | 'muld_ao3'
     tier            : 'easy' | 'medium' | 'hard' | None
     split           : 'train' | 'val' | 'test'  (our split, not PAN's)
     """
@@ -104,30 +120,8 @@ class Document:
 
 
 # --------------------------------------------------------------------------- #
-#  PAN loader
+#  Shared document-reading helper
 # --------------------------------------------------------------------------- #
-
-Tier  = Literal["easy", "medium", "hard"]
-
-# PAN 2023 has deeply nested folders; 2024/2025 use flat easy/medium/hard
-_PAN_TIER_DIRS = {
-    "pan2023": {"easy": "easy",   "medium": "medium", "hard": "hard"},
-    "pan2024": {"easy": "easy",   "medium": "medium", "hard": "hard"},
-    "pan2025": {"easy": "easy",   "medium": "medium", "hard": "hard"},
-}
-
-_PAN2023_SPLIT_NAMES = {
-    "easy": "pan23-multi-author-analysis-dataset1",
-    "medium": "pan23-multi-author-analysis-dataset2",
-    "hard": "pan23-multi-author-analysis-dataset3",
-}
-
-_PAN_SPLIT_DIRNAME = {
-    "pan2023": lambda tier_dir, split: f"{_PAN2023_SPLIT_NAMES[tier_dir]}-{split}",
-    "pan2024": lambda tier_dir, split: split,
-    "pan2025": lambda tier_dir, split: split,
-}
-
 
 def _read_pan_document(
     txt_path: Path,
@@ -161,9 +155,40 @@ def _read_pan_document(
     )
 
 
+# --------------------------------------------------------------------------- #
+#  PAN loader (LEGACY -- pools train+validation, synthetic re-split)
+# --------------------------------------------------------------------------- #
+
+Tier  = Literal["easy", "medium", "hard"]
+
+# PAN 2023 has deeply nested folders; 2024/2025 use flat easy/medium/hard
+_PAN_TIER_DIRS = {
+    "pan2023": {"easy": "easy",   "medium": "medium", "hard": "hard"},
+    "pan2024": {"easy": "easy",   "medium": "medium", "hard": "hard"},
+    "pan2025": {"easy": "easy",   "medium": "medium", "hard": "hard"},
+}
+
+_PAN2023_SPLIT_NAMES = {
+    "easy": "pan23-multi-author-analysis-dataset1",
+    "medium": "pan23-multi-author-analysis-dataset2",
+    "hard": "pan23-multi-author-analysis-dataset3",
+}
+
+_PAN_SPLIT_DIRNAME = {
+    "pan2023": lambda tier_dir, split: f"{_PAN2023_SPLIT_NAMES[tier_dir]}-{split}",
+    "pan2024": lambda tier_dir, split: split,
+    "pan2025": lambda tier_dir, split: split,
+}
+
+
 class PANDataset:
     """
-    Loads PAN labeled documents (train + validation splits) for one year/tier.
+    LEGACY loader. Loads PAN labeled documents (train + validation splits)
+    for one year/tier from data/raw/pan{year}/{tier}/, then the caller
+    typically re-splits with split_documents() into a synthetic 70/15/15.
+
+    For 2025 data, prefer load_pan2025_full() instead -- it reads the real
+    official train/validation/test folders directly.
 
     Parameters
     ----------
@@ -171,9 +196,6 @@ class PANDataset:
         Path to data/raw/
     year : '2023' | '2024' | '2025'
     tier : 'easy' | 'medium' | 'hard'
-
-    Note: We only load train + validation (both have ground truth).
-          The official PAN test split has no labels — we ignore it.
 
     Example
     -------
@@ -244,6 +266,69 @@ class PANDataset:
 
     def __repr__(self) -> str:
         return f"PANDataset(year={self.year}, tier={self.tier}, root={self.root})"
+
+
+# --------------------------------------------------------------------------- #
+#  PAN 2025 REAL official split loader (use this for all new 2025 work)
+# --------------------------------------------------------------------------- #
+
+def load_pan2025_full(
+    root: str | Path,
+    tier: Tier,
+    split: Literal["train", "validation", "test"],
+) -> List[Document]:
+    """
+    Load PAN 2025's REAL official split directly from
+    data/raw/pan2025_full/{tier}/{split}/.
+
+    Unlike PANDataset (which pools train+validation and re-splits with
+    split_documents), this reads exactly the folder you ask for -- so
+    'test' here is the actual, once-per-project official test set, not a
+    slice manufactured locally.
+
+    Use this for ALL 2025 work going forward. Never call split_documents()
+    on the output of this function -- train/validation/test are already
+    the real official splits.
+
+    Example
+    -------
+        train_docs = load_pan2025_full("data/raw", tier="hard", split="train")
+        val_docs   = load_pan2025_full("data/raw", tier="hard", split="validation")
+        # test_docs = load_pan2025_full("data/raw", tier="hard", split="test")
+        # ^ only call this once, at the very end, for the final honest number
+    """
+    root = Path(root)
+    split_dir = root / "pan2025_full" / tier / split
+    if not split_dir.exists():
+        raise FileNotFoundError(f"Not found: {split_dir}")
+
+    docs = []
+    for txt_path in sorted(split_dir.glob("problem-*.txt")):
+        problem_id = txt_path.stem
+        truth_path = split_dir / f"truth-{problem_id}.json"
+        doc_id = f"pan2025full_{tier}_{split}_{problem_id}"
+        doc = _read_pan_document(
+            txt_path=txt_path,
+            truth_path=truth_path,
+            doc_id=doc_id,
+            source="pan2025_full",
+            tier=tier,
+        )
+        doc.split = "train" if split == "train" else ("val" if split == "validation" else "test")
+        if doc.has_labels:
+            docs.append(doc)
+    return docs
+
+
+def load_pan2025_full_all_tiers(
+    root: str | Path,
+    split: Literal["train", "validation", "test"],
+) -> List[Document]:
+    """Convenience: load a given split across all three tiers, combined."""
+    docs = []
+    for tier in ["easy", "medium", "hard"]:
+        docs.extend(load_pan2025_full(root, tier=tier, split=split))
+    return docs
 
 
 # --------------------------------------------------------------------------- #
@@ -342,7 +427,7 @@ class MuLDDataset:
 
 
 # --------------------------------------------------------------------------- #
-#  Our own 70 / 15 / 15 splitter
+#  Our own 70 / 15 / 15 splitter (LEGACY -- do not use on pan2025_full output)
 # --------------------------------------------------------------------------- #
 
 def split_documents(
@@ -353,6 +438,11 @@ def split_documents(
 ) -> Tuple[List[Document], List[Document], List[Document]]:
     """
     Split a list of labeled Documents into train / val / test.
+
+    LEGACY: only use this on PANDataset output (2023/2024, or old-style
+    2025 pooled train+validation). Do NOT call this on load_pan2025_full()
+    output -- that's already the real official split, re-splitting it
+    would destroy the honest train/val/test boundary.
 
     Parameters
     ----------
@@ -400,7 +490,7 @@ def split_documents(
 
 
 # --------------------------------------------------------------------------- #
-#  Convenience loaders
+#  Convenience loaders (LEGACY, 2023/2024 use)
 # --------------------------------------------------------------------------- #
 
 def load_pan_labeled(
@@ -411,6 +501,7 @@ def load_pan_labeled(
 ) -> Tuple[List[Document], List[Document], List[Document]]:
     """
     One-call loader: load PAN labeled docs and return our own train/val/test split.
+    LEGACY -- for 2025, use load_pan2025_full() instead.
 
     Example
     -------
@@ -427,6 +518,7 @@ def load_pan_all_tiers(
 ) -> Dict[str, Tuple[List[Document], List[Document], List[Document]]]:
     """
     Load all three tiers for a given year, each with its own 70/15/15 split.
+    LEGACY -- for 2025, use load_pan2025_full_all_tiers() instead.
 
     Returns
     -------

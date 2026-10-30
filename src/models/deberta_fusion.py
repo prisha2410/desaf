@@ -7,13 +7,34 @@ Modes:
   3. Document-level + adversarial (--finetune --bilstm --adversarial):
      adds a pseudo-topic discriminator with gradient reversal to
      disentangle topic signal from the learned boundary representation.
+  4. Document-level + contrastive (--finetune --bilstm --contrastive):
+     adds a supervised contrastive (topic-decoupling) loss on the fused
+     representation, pre-BiLSTM -- pulls together same-label boundary
+     representations and pushes apart differently-labeled ones,
+     regardless of topic. A different (and per SCL-DeBERTa's published
+     result, more successful) approach to the same goal as the GRL
+     adversarial branch above.
+
+Tier B additions (all independent, own-work techniques motivated by
+failure modes diagnosed earlier in this project):
+  - SelfAdjustingDiceLoss : loss-level fix for Hard-tier class imbalance
+  - FiLMFusion            : affine (scale+shift) alternative to the
+                            multiplicative-gate-only StyleAttentionFusion
+  - TransformerSeqEncoder : self-attention stacked on top of the BiLSTM
+                            output, so any boundary can attend to any
+                            other boundary in the document directly
+  - XBMQueue              : cross-batch memory for the contrastive loss,
+                            fixing the too-few-pairs-per-step problem
+  - rdrop_kl_loss         : R-Drop consistency regularization
 
 Architecture (document-level):
     For each document:
       - Encode all sentence pairs through DeBERTa → [CLS] hidden states
-      - Attention-weighted fusion with stylometric diffs
+      - Attention-weighted (or FiLM) fusion with stylometric diffs
+      - (optional) Supervised contrastive loss on this fused representation
       - Project to lower dimension
       - BiLSTM over the boundary sequence → document context
+      - (optional) Transformer encoder over the BiLSTM output
       - MLP head → per-boundary logits
       - (optional) Gradient-reversed topic classifier on the BiLSTM output
 """
@@ -25,6 +46,33 @@ import torch
 import torch.nn as nn
 from typing import List, Optional, Tuple
 from torch.utils.data import Dataset
+
+
+def load_state_dict_flexible(model, state_dict, verbose=True):
+    """
+    Load a checkpoint into `model`, skipping any key whose shape doesn't
+    match the model's own parameter shape (instead of crashing, which is
+    what strict=False alone does on a shape mismatch).
+
+    Returns the list of skipped key names.
+    """
+    model_state = model.state_dict()
+    compatible = {}
+    skipped = []
+    for key, val in state_dict.items():
+        if key in model_state and model_state[key].shape == val.shape:
+            compatible[key] = val
+        else:
+            skipped.append(key)
+
+    model.load_state_dict(compatible, strict=False)
+
+    if verbose:
+        print(f"[load_state_dict_flexible] loaded {len(compatible)}/{len(state_dict)} keys")
+        if skipped:
+            print(f"[load_state_dict_flexible] skipped (shape mismatch or new, "
+                 f"will use fresh init): {skipped}")
+    return skipped
 
 
 # --------------------------------------------------------------------------- #
@@ -85,6 +133,201 @@ class TopicAdversary(nn.Module):
 
 
 # --------------------------------------------------------------------------- #
+#  Supervised Contrastive Loss (topic-decoupling, applied pre-BiLSTM)
+# --------------------------------------------------------------------------- #
+
+class SupConLoss(nn.Module):
+    """
+    Supervised Contrastive Loss (Khosla et al., 2020), adapted for the
+    binary style-change label instead of multi-class labels.
+
+    Pulls together boundary representations sharing the same style-change
+    label (change vs no-change) and pushes apart differently-labeled ones,
+    REGARDLESS of topic -- this is the topic-decoupling mechanism
+    SCL-DeBERTa uses. Unlike the GRL adversarial branch above (already
+    reported as a negative result in this project), this doesn't need
+    pseudo-topic labels at all; it directly rewards label-consistent
+    clustering.
+    """
+    def __init__(self, temperature: float = 0.1):
+        super().__init__()
+        self.temperature = temperature
+
+    def forward(self, features: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        """
+        features: (N, D) L2-normalized embeddings
+        labels:   (N,) binary labels (0/1)
+        """
+        device = features.device
+        n = features.shape[0]
+        if n < 2:
+            return torch.tensor(0.0, device=device)
+
+        labels = labels.view(-1, 1)
+        mask = torch.eq(labels, labels.T).float().to(device)
+
+        sim = torch.matmul(features, features.T) / self.temperature
+        sim_max, _ = torch.max(sim, dim=1, keepdim=True)
+        sim = sim - sim_max.detach()
+
+        logits_mask = torch.ones_like(mask) - torch.eye(n, device=device)
+        mask = mask * logits_mask
+
+        exp_sim = torch.exp(sim) * logits_mask
+        log_prob = sim - torch.log(exp_sim.sum(dim=1, keepdim=True) + 1e-12)
+
+        pos_count = mask.sum(dim=1)
+        valid = pos_count > 0
+        if valid.sum() == 0:
+            return torch.tensor(0.0, device=device)
+
+        mean_log_prob_pos = (mask * log_prob).sum(dim=1)[valid] / pos_count[valid]
+        loss = -mean_log_prob_pos.mean()
+        return loss
+
+
+# --------------------------------------------------------------------------- #
+#  Tier B additions
+# --------------------------------------------------------------------------- #
+
+class SelfAdjustingDiceLoss(nn.Module):
+    """Dice loss (Li et al. 2020) for imbalanced binary classification.
+    Hard tier is ~17% positive -- this directly targets that imbalance in
+    the loss itself, weighting down easy well-classified examples via
+    (1-p_t)^alpha, unlike pos_weight in BCE which just reweights uniformly."""
+    def __init__(self, alpha: float = 1.0, smooth: float = 1.0):
+        super().__init__()
+        self.alpha = alpha
+        self.smooth = smooth
+
+    def forward(self, logits, labels):
+        probs = torch.sigmoid(logits)
+        probs_pos = probs * labels + (1 - probs) * (1 - labels)
+        weight = (1 - probs_pos) ** self.alpha
+        p = weight * probs
+        numerator = 2 * (p * labels).sum() + self.smooth
+        denominator = (p ** 2).sum() + (labels ** 2).sum() + self.smooth
+        return 1 - numerator / denominator
+
+
+class FiLMFusion(nn.Module):
+    """FiLM (Perez et al. 2018) affine conditioning: the DeBERTa CLS vector
+    predicts BOTH a scale (gamma) and shift (beta) applied to the
+    stylometric diff vector, instead of StyleAttentionFusion's
+    multiplicative-gate-only. Strictly more expressive -- addresses the
+    limitation this project found where a gate alone couldn't represent
+    inverted small-value-means-signal relationships."""
+    def __init__(self, deberta_dim: int, style_dim: int):
+        super().__init__()
+        self.style_norm = nn.LayerNorm(style_dim)
+        self.film_generator = nn.Sequential(
+            nn.Linear(deberta_dim, style_dim * 2),
+            nn.Tanh(),
+            nn.Linear(style_dim * 2, style_dim * 2),
+        )
+        self.style_dim = style_dim
+
+    def forward(self, cls_hidden: torch.Tensor, style_diff: torch.Tensor) -> torch.Tensor:
+        style_normed = self.style_norm(style_diff)
+        gamma_beta = self.film_generator(cls_hidden)
+        gamma, beta = gamma_beta[:, :self.style_dim], gamma_beta[:, self.style_dim:]
+        modulated = gamma * style_normed + beta
+        return torch.cat([cls_hidden, modulated], dim=-1)
+
+
+class TransformerSeqEncoder(nn.Module):
+    """Self-attention layer stacked ON TOP of the BiLSTM output. Lets any
+    boundary attend directly to any other boundary in the document, not
+    only through the recurrent BiLSTM state -- useful since an author's
+    block can span many boundaries, not just adjacent ones."""
+    def __init__(self, dim: int, n_heads: int = 4, n_layers: int = 2, dropout: float = 0.1):
+        super().__init__()
+        layer = nn.TransformerEncoderLayer(
+            d_model=dim, nhead=n_heads, dim_feedforward=dim * 2,
+            dropout=dropout, batch_first=True, activation="gelu",
+        )
+        self.encoder = nn.TransformerEncoder(layer, num_layers=n_layers)
+        self.pos_embed = nn.Parameter(torch.randn(1, 512, dim) * 0.02)
+        self.pre_norm = nn.LayerNorm(dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Runs in fp32 regardless of the surrounding autocast context --
+        the softmax inside self-attention is numerically unstable under
+        fp16 when stacked this deep (same class of issue that broke
+        R-Drop's KL term)."""
+        n = x.shape[1]
+        x = x.float()
+        x = self.pre_norm(x + self.pos_embed[:, :n, :])
+        return self.encoder(x)
+
+
+class XBMQueue:
+    """Cross-Batch Memory (Wang et al. 2020) for the contrastive loss.
+    Your own diagnosis was that SupCon's signal was flat/noisy -- each
+    document-level "batch" (1 document) gives far too few positive/negative
+    pairs per contrastive step. XBM keeps a FIFO queue of recent
+    (embedding, label) pairs across many batches so every contrastive step
+    sees a much larger, more stable comparison pool without needing a
+    bigger GPU batch."""
+    def __init__(self, size: int = 2048, dim: int = 128, device="cuda"):
+        self.size = size
+        self.feats = torch.zeros(size, dim, device=device)
+        self.labels = torch.zeros(size, device=device)
+        self.ptr = 0
+        self.full = False
+
+    @torch.no_grad()
+    def enqueue(self, feats, labels):
+        n = feats.shape[0]
+        if n == 0:
+            return
+        if n >= self.size:
+            self.feats[:] = feats[-self.size:]
+            self.labels[:] = labels[-self.size:]
+            self.ptr = 0
+            self.full = True
+            return
+        end = self.ptr + n
+        if end <= self.size:
+            self.feats[self.ptr:end] = feats
+            self.labels[self.ptr:end] = labels
+        else:
+            first = self.size - self.ptr
+            self.feats[self.ptr:] = feats[:first]
+            self.labels[self.ptr:] = labels[:first]
+            self.feats[:end - self.size] = feats[first:]
+            self.labels[:end - self.size] = labels[first:]
+            self.full = True
+        self.ptr = end % self.size
+        if end >= self.size:
+            self.full = True
+
+    def get(self):
+        if self.full:
+            return self.feats, self.labels
+        return self.feats[:self.ptr], self.labels[:self.ptr]
+
+
+def rdrop_kl_loss(logits1: torch.Tensor, logits2: torch.Tensor) -> torch.Tensor:
+    """R-Drop (Liang et al. 2021): two forward passes of the SAME input
+    through the model (different dropout masks each time), penalized by
+    symmetric KL between the two predicted distributions. Targets
+    overfitting risk of fine-tuning only 2 DeBERTa layers on a few
+    thousand Hard-tier documents -- forces predictions to be robust to the
+    model's own dropout noise instead of memorizing it.
+
+    Computed in fp32 regardless of the surrounding autocast context --
+    under fp16, sigmoid outputs near 0/1 make log() blow up to NaN."""
+    logits1 = logits1.float()
+    logits2 = logits2.float()
+    p1 = torch.sigmoid(logits1).clamp(1e-6, 1 - 1e-6)
+    p2 = torch.sigmoid(logits2).clamp(1e-6, 1 - 1e-6)
+    kl1 = p1 * (torch.log(p1) - torch.log(p2)) + (1 - p1) * (torch.log(1 - p1) - torch.log(1 - p2))
+    kl2 = p2 * (torch.log(p2) - torch.log(p1)) + (1 - p2) * (torch.log(1 - p2) - torch.log(1 - p1))
+    return 0.5 * (kl1 + kl2).mean()
+
+
+# --------------------------------------------------------------------------- #
 #  End-to-end fine-tuning model
 # --------------------------------------------------------------------------- #
 
@@ -103,6 +346,11 @@ class DeBERTaFusionE2E(nn.Module):
         dropout: float = 0.3,
         use_adversarial: bool = False,
         n_topics: int = 20,
+        use_contrastive: bool = False,
+        use_film: bool = False,
+        use_transformer_seq: bool = False,
+        transformer_layers: int = 2,
+        transformer_heads: int = 4,
     ):
         super().__init__()
         self.use_style = use_style
@@ -111,6 +359,7 @@ class DeBERTaFusionE2E(nn.Module):
         self.unfreeze_layers = unfreeze_layers
         self.use_adversarial = use_adversarial
         self.n_topics = n_topics
+        self.use_film = use_film
 
         from transformers import DebertaV2Model
         self.deberta = DebertaV2Model.from_pretrained(self.DEBERTA_MODEL)
@@ -129,7 +378,10 @@ class DeBERTaFusionE2E(nn.Module):
 
         # Fusion
         if use_style and use_attention_fusion:
-            self.style_fusion = StyleAttentionFusion(self.DEBERTA_DIM, style_dim)
+            if use_film:
+                self.style_fusion = FiLMFusion(self.DEBERTA_DIM, style_dim)
+            else:
+                self.style_fusion = StyleAttentionFusion(self.DEBERTA_DIM, style_dim)
             fused_dim = self.DEBERTA_DIM + style_dim
         elif use_style:
             fused_dim = self.DEBERTA_DIM + style_dim
@@ -137,6 +389,20 @@ class DeBERTaFusionE2E(nn.Module):
             fused_dim = self.DEBERTA_DIM
 
         self.fused_dim = fused_dim
+
+        # Contrastive projection head -- only used during training when
+        # use_contrastive=True. Operates on the fused per-boundary
+        # representation, BEFORE the BiLSTM (see module docstring for why:
+        # this shapes the fusion output itself to be label-discriminative
+        # and topic-invariant, matching where SCL-DeBERTa applies its
+        # contrastive+topic-decoupling objective "atop DeBERTa").
+        self.use_contrastive = use_contrastive
+        if use_contrastive:
+            self.contrastive_proj = nn.Sequential(
+                nn.Linear(fused_dim, 256),
+                nn.ReLU(),
+                nn.Linear(256, 128),
+            )
 
         # BiLSTM path
         if use_bilstm:
@@ -152,8 +418,14 @@ class DeBERTaFusionE2E(nn.Module):
                 bidirectional=True, dropout=0,
             )
             head_input = bilstm_hidden * 2  # 256
+            self.use_transformer_seq = use_transformer_seq
+            if use_transformer_seq:
+                self.seq_transformer = TransformerSeqEncoder(
+                    head_input, n_heads=transformer_heads, n_layers=transformer_layers,
+                )
         else:
             head_input = fused_dim
+            self.use_transformer_seq = False
 
         # MLP head
         self.head = nn.Sequential(
@@ -178,9 +450,11 @@ class DeBERTaFusionE2E(nn.Module):
         print(f"DeBERTa Fusion E2E: {trainable:,} trainable / {total:,} total")
         print(f"Fine-tuning last {unfreeze_layers} DeBERTa layers")
         print(f"Stylometric features: {'ON' if use_style else 'OFF'}")
-        print(f"Attention fusion: {'ON' if use_attention_fusion else 'OFF (concat)'}")
+        print(f"Attention fusion: {'ON (FiLM)' if (use_attention_fusion and use_film) else ('ON (gate)' if use_attention_fusion else 'OFF (concat)')}")
         print(f"BiLSTM: {'ON' if use_bilstm else 'OFF'}")
+        print(f"Transformer-over-BiLSTM: {'ON' if self.use_transformer_seq else 'OFF'}")
         print(f"Topic adversarial: {'ON (' + str(n_topics) + ' pseudo-topics)' if use_adversarial else 'OFF'}")
+        print(f"Contrastive (topic-decoupling): {'ON' if use_contrastive else 'OFF'}")
 
     def encode_pairs(
         self,
@@ -234,6 +508,8 @@ class DeBERTaFusionE2E(nn.Module):
         """
         x = self.proj(pair_reprs)          # (1, n_boundaries, hidden*2)
         lstm_out, _ = self.bilstm(x)       # (1, n_boundaries, hidden*2)
+        if self.use_transformer_seq:
+            lstm_out = self.seq_transformer(lstm_out).to(lstm_out.dtype)
         logits = self.head(lstm_out)       # (1, n_boundaries, 1)
         logits = logits.squeeze(-1).squeeze(0)  # (n_boundaries,)
 
@@ -257,6 +533,10 @@ class DeBERTaFusionE2E(nn.Module):
         if self.use_bilstm:
             head_params += list(self.proj.parameters())
             head_params += list(self.bilstm.parameters())
+        if self.use_transformer_seq:
+            head_params += list(self.seq_transformer.parameters())
+        if self.use_contrastive:
+            head_params += list(self.contrastive_proj.parameters())
         return head_params
 
     def get_adversary_params(self):
