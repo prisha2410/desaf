@@ -487,6 +487,126 @@ low-overlap and 44% of high-overlap boundaries.
 
 ---
 
+**(H) C50 construction experiment, MODEL-FREE part (scripts/c50_multiauthor_test.py --build-only).**
+PROVENANCE: computed in the analysis sandbox on the user's uploaded C50 copy (4,961 articles with
+>= 6 sentences), seed 0; deterministic, so the user's own run should reproduce these exactly; confirm
+when that log arrives. 900 documents per construction, ~12 sentences, change rate ~0.18, 2-4 authors,
+segments = consecutive sentences of one article. AUC > 0.5 = more dissimilar at an author change.
+
+Splice filter on ALL words (TF-IDF incl. function words):
+
+| Construction | Overlap at change | Within author | fw_dist | trigram | punct |
+|---|---|---|---|---|---|
+| random | 0.0216 | 0.0983 | 0.537 N | 0.718 N | 0.549 N |
+| same_topic | 0.0402 | 0.0988 | 0.531 N | 0.672 N | 0.532 N |
+| splice >= 0.05 | 0.0889 | 0.0997 | 0.452 R | 0.515 N | 0.497 |
+| splice >= 0.10 | 0.1365 | 0.0993 | 0.447 R | 0.412 R | 0.486 |
+| splice >= 0.15 | 0.1822 | 0.1000 | 0.438 R | 0.353 R | 0.495 |
+| splice >= 0.20 | 0.2043 | 0.0995 | 0.423 R | 0.318 R | 0.482 R |
+| splice >= 0.30 | 0.2230 | 0.0970 | 0.414 R | 0.292 R | 0.472 R |
+| most-similar splice | 0.2327 | 0.0979 | 0.406 R | 0.293 R | 0.474 R |
+
+Splice filter on CONTENT words only (stop words removed; fw and punct are held out), FINAL design:
+
+| Construction | Overlap at change | Within author | fw_dist (held out) | trigram | punct (held out) |
+|---|---|---|---|---|---|
+| random | 0.0217 | 0.0983 | 0.537 N | 0.718 N | 0.549 N |
+| same_topic | 0.0403 | 0.0990 | 0.531 N | 0.672 N | 0.532 N |
+| splice >= 0.05 | 0.1008 | 0.1003 | 0.509 | 0.499 | 0.508 |
+| splice >= 0.10 | 0.1391 | 0.0993 | 0.518 N | 0.441 R | 0.515 |
+| splice >= 0.15 | 0.1726 | 0.0988 | 0.507 | 0.391 R | 0.505 |
+| splice >= 0.20 | 0.1914 | 0.0995 | 0.499 | 0.365 R | 0.504 |
+| splice >= 0.30 | 0.2083 | 0.0972 | 0.497 | 0.340 R | 0.487 |
+| most-similar splice | 0.2224 | 0.0987 | 0.481 R | 0.337 R | 0.503 |
+
+(fallback = no candidate above threshold, most similar used: 1.3%, 7.5%, 26.6%, 48.4%, 78.9%.)
+Reading:
+- Topic matching alone keeps the classical direction; similarity filtering at the splice removes it.
+- Dose-response: trigram AUC falls steadily as the filter tightens and crosses 0.5 where overlap at
+  author changes equals natural within-author overlap.
+- Held-out features (fw, punct under the content filter) do NOT reverse; they fall to chance. Only
+  features correlated with the filter's similarity measure reverse. So the reversal is a selection
+  effect of how splice points are chosen. PAN 2025 Hard reverses ALL four features, consistent with a
+  filter that uses stylistic as well as semantic similarity (the PAN 2026 overview describes such a
+  filter for 2026; unverified for 2025).
+- At matched overlap (splice >= 0.05, content filter: 0.1008 vs 0.1003) all three sentence-level
+  surface cues are at chance (0.499-0.509): in C50, these cues carry little authorship signal once topic
+  continuity is matched. Caveats: Reuters house style homogenises writing; only 3 surface features here;
+  the 193-feature distance and DeSAF detection come from the user's full run.
+
+**(H, authoritative) User's own run, 2026-11-02, logs\c50_multiauthor_seed43.log (USE THESE in the
+paper; they differ from the sandbox numbers above only in the 3rd decimal, from library versions;
+every direction matches).** Content-word splice filter, 900 docs per construction:
+
+| Construction | Overlap change / within | fw_dist | trigram | punct | style_L2 (193) | DeSAF ROC-AUC | F1 @0.50 (P / R) | best F1 (thr) |
+|---|---|---|---|---|---|---|---|---|
+| random | 0.0220 / 0.0977 | 0.540 N | 0.716 N | 0.555 N | 0.552 N | 0.7783 | 0.2203 (0.596 / 0.135) | 0.4556 (0.02) |
+| same_topic | 0.0400 / 0.0986 | 0.535 N | 0.675 N | 0.537 N | 0.546 N | 0.7175 | 0.1388 (0.450 / 0.082) | 0.3579 (0.02) |
+| splice >= 0.05 | 0.1008 / 0.0995 | 0.500 | 0.498 | 0.512 | 0.530 N | 0.6994 | 0.1109 | 0.3361 (0.02) |
+| splice >= 0.10 | 0.1399 / 0.0995 | 0.509 | 0.432 R | 0.514 | 0.522 N | 0.7073 | 0.1381 | 0.3531 (0.02) |
+| splice >= 0.15 | 0.1732 / 0.0980 | 0.502 | 0.382 R | 0.502 | 0.512 | 0.7051 | 0.1485 | 0.3455 (0.02) |
+| splice >= 0.20 | 0.1908 / 0.0990 | 0.498 | 0.360 R | 0.498 | 0.510 | 0.7158 | 0.1800 | 0.3692 (0.02) |
+| splice >= 0.30 | 0.2063 / 0.0997 | 0.499 | 0.344 R | 0.489 | 0.510 | 0.7337 | 0.1838 | 0.3936 (0.02) |
+| most-similar splice | 0.2191 / 0.0984 | 0.486 | 0.337 R | 0.492 | 0.513 | 0.7330 | 0.1974 (0.522 / 0.122) | 0.3915 (0.02) |
+
+(all-change F1 baseline ~0.31; checkpoint = gated seed43, threshold 0.50 tuned on PAN; no retraining.)
+- PAN-trained DeSAF detects author changes in natural news text above chance (ROC-AUC 0.70-0.78) but
+  far below in-domain PAN performance; its PAN threshold does not transfer (recall 0.06-0.14 at 0.50;
+  the best threshold is at the bottom of the grid, 0.02, so probabilities collapse out of domain).
+  "best F1" picks the threshold on the same documents, so it is optimistic.
+- Detection is best when topics shift (random 0.778) and drops when topic is matched (0.718).
+  Similarity-filtered splicing does not lower it further (0.70-0.73): the model is not relying on the
+  filtered surface cue.
+- The 193-feature distance (not filtered) stays weakly normal / near chance (0.51-0.53) under every
+  splice filter: held-out cues go to chance, they do not reverse.
+
+**Literature check (workflow, 2026-11-02; snippet-level, verify before citing):** verdict "partially
+established". The broad idea that benchmark construction shapes what authorship features capture is
+known (AV: Bevendorff 2019, Brad 2022, Wegmann 2022, Sawatphol 2024; multi-author decomposition:
+Giannella 2016; PAN organisers on topic control). Not found anywhere: the sign reversal of classical
+features across tiers, the Simpson's paradox, and a causal construction experiment. Tier routing is
+anticipated by ULILLE (PAN 2026). Must read in full (ceur-ws blocked in sandbox): PAN 2025 notebook
+Vol-4038 paper_295 (possibly OpenFact, per-tier feature tests), PAN 2026 overview (Vol-4283 paper388),
+ULILLE (paper415), rheaveaura (paper414; check whether this is the user's own team).
+
+---
+
+**Primary sources read in full (uploaded PDFs, 2026-11-02):**
+- PAN 2025 overview (paper_279): "For each sentence, we calculate stylistic and semantic feature
+  vectors ... calculation of both the topic (semantic) and stylistic similarity ... applying different
+  similarity thresholds for pairs of consecutive sentences ... relatively high for the easy dataset,
+  moderate for the medium dataset, and low for the difficult dataset." Hard: "All sentences in a
+  document pertain to a single topic and are stylistically similar." Easy: "relatively low stylistic
+  similarity". => Hard is BUILT from stylistically similar consecutive sentences. The Hard reversal is
+  (at least partly) a selection effect of the stated design. Quote descriptions, not threshold numbers.
+- PAN 2026 overview (Vol-4283 paper388): fanfiction (AO3, top-100 fandoms, character pairs); per-
+  sentence stylistic feature vector + SBERT semantic vector; "concatenated sentences based on their
+  topical and stylistic similarity"; threshold "relatively low for the Easy ... high for the Hard"
+  (opposite numeric wording to 2025, same meaning). 15,000 docs per tier. Results: best Medium 0.768,
+  best Hard 0.780 (Hard > Medium again, as in 2025); easy "solved". The user's team appears in the
+  results table as "rheaveauro" (typo for rheaveaura): 0.997 / 0.558 / 0.580.
+- OpenFact (PAN 2025, Vol-4038 paper_295, Ksiezniak, Wecel, Sawinski): chi-squared tests of
+  independence between punctuation-feature changes (ellipsis, ?, !, quotes, all-caps) and author change,
+  per tier; significant associations in all tiers. NO direction reported. Does not pre-empt the sign
+  reversal; cite as related per-tier evidence.
+- ULILLE (PAN 2026, Vol-4283 paper415, Khelfaoui, Sileo, Loiseau): per-regime Ettin-400M cross-encoder
+  specialists + a document-level router (head-tail, 64 sentences) with 0.9867 validation accuracy
+  (confusions mainly easy<->hard; medium almost perfect). They state the router "learns dataset-level
+  regularities of the data construction procedure". => tier routing is PRIOR WORK, and a strong router
+  identifies the tier almost perfectly (on 2026 data). Our "86% is not enough" must be presented as a
+  simple-classifier result, not as "tiers cannot be inferred".
+- rheaveaura (PAN 2026, Vol-4283 paper414) = THE USER'S OWN notebook (Prisha Khalasi): SBERT + 12
+  stylometric features + gradient boosting on PAN 2026; SBERT change/no-change similarity gap Easy
+  0.549, Medium 0.118, Hard 0.038 (no-change 0.618 vs change 0.579 on Hard: still the normal direction,
+  just tiny); GPT-2 NLL gap 0.788 / 0.333 / 0.190; validation macro-F1 0.998 / 0.555 / 0.582. Framed Hard
+  as "leaving only pure stylistic differences"; the new paper should correct that framing (Hard is
+  style-MATCHED by construction), cite it in the third person, and state the differences (PAN 2025 vs
+  2026; classical features reverse vs an embedding gap that shrinks; causal C50 experiment).
+  Note: its Table 3 cites better_call_claude's self-reported 0.923/0.828/0.724, not the official
+  0.929/0.815/0.731.
+
+---
+
 ## Still open / not yet done
 
 - Gate vs concat: DONE for 3 seeds, with per-seed significance for all 3 (section 4b).
