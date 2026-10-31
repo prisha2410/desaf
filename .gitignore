@@ -17,3 +17,4 @@ allfileshas.txt
 .venv/
 *.pdf
 *.zip
+*.egg-info/
