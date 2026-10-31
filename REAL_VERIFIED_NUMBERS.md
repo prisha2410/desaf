@@ -84,10 +84,34 @@ Checkpoint `checkpoints/ablation_concat_contrastive_seed43.pt`, val-tuned thresh
 | Gate (headline) | 43 | 0.9286 | 0.7198 | 0.7198 | 0.7894 | 0.50 |
 | Raw concat | 43 | 0.9351 | 0.7140 | 0.7209 | 0.7900 | 0.44 |
 | Delta (concat - gate) | | +0.0065 | -0.0058 | +0.0011 | +0.0006 | |
+| Gate (headline) | 44 | 0.9315 | 0.7229 | 0.7019 | 0.7854 | 0.52 |
+| Raw concat | 44 | 0.9319 | 0.7201 | 0.7125 | 0.7882 | (from log) |
+| Delta (concat - gate) | | +0.0004 | -0.0028 | +0.0106 | +0.0028 | |
 
-Validation (same run): overall 0.7948; Easy 0.9311 / Medium 0.7432 / Hard 0.7126.
-Predictions saved: `checkpoints/concat_seed43/test_predictions.npz`.
-Seeds 44/45 for concat not yet run.
+Seed43 concat validation: overall 0.7948; Easy 0.9311 / Medium 0.7432 / Hard 0.7126.
+Predictions saved: `checkpoints/concat_seed43/test_predictions.npz`,
+`checkpoints/concat_seed44/test_predictions.npz` (seed44 predictions log present; verify file).
+| Gate (headline) | 45 | 0.9181 | 0.7155 | 0.7182 | 0.7839 | 0.64 |
+| Raw concat | 45 | 0.9280 | 0.7114 | 0.7236 | 0.7877 | 0.56 |
+| Delta (concat - gate) | | +0.0099 | -0.0041 | +0.0054 | +0.0038 | |
+
+Seed45 concat: rerun completed 2026-10-30 (first attempt was cut off by a shutdown); predictions
+saved to `checkpoints/concat_seed45/test_predictions.npz`; eval and predictions F1 agree exactly.
+
+**3-seed summary (official test, mean +/- sample SD, ddof=1):**
+
+| Fusion | Easy | Medium | Hard | Macro |
+|---|---|---|---|---|
+| Gate | 0.9261 +/- 0.0071 | 0.7194 +/- 0.0037 | 0.7133 +/- 0.0099 | 0.7863 +/- 0.0028 |
+| Raw concat | 0.9317 +/- 0.0036 | 0.7152 +/- 0.0045 | 0.7190 +/- 0.0058 | 0.7886 +/- 0.0012 |
+| Mean paired delta (concat - gate) | +0.0056 | -0.0042 | +0.0057 | +0.0023 |
+| Paired t-test p (3 seeds, uncorrected) | 0.181 | 0.040 | 0.174 | |
+
+NOTE: section 2 reports the gate SDs as population SD (ddof=0: 0.0058/0.0031/0.0080). Use the
+sample SD above (ddof=1: 0.0071/0.0037/0.0099) in the paper, and say so.
+Reading: no tier differs significantly once you correct for testing 3 tiers (Bonferroni 0.040*3 =
+0.12). The only consistent direction is a small Medium advantage for the gate (same sign on all 3
+seeds); concat is slightly ahead on Easy, Hard and macro. Accuracy does not depend on the gate.
 
 Significance, gate_seed43 vs concat_seed43 (`compute_significance.py`, 10,000 doc-level
 bootstrap resamples + McNemar). gate_seed43 F1s reproduced exactly (0.9286/0.7198/0.7198),
@@ -100,6 +124,28 @@ confirming `checkpoints/seed43/test_predictions.npz` is valid.
 | Hard | -0.0010 | [-0.0135, 0.0118] | 0.8702 | 0.4425 |
 
 No tier significant at 0.05. Gate and raw concat are statistically indistinguishable on seed 43.
+
+Significance, gate_seed44 vs concat_seed44 (gate_seed44 F1s reproduced exactly: 0.9315/0.7229/0.7019):
+
+| Tier | Delta (gate - concat) | 95% CI | Bootstrap p | McNemar p |
+|---|---|---|---|---|
+| Easy | -0.0004 | [-0.0072, 0.0064] | 0.9112 | 0.9462 |
+| Medium | +0.0029 | [-0.0064, 0.0120] | 0.5540 | 0.6010 |
+| Hard | -0.0105 | [-0.0234, 0.0022] | 0.1132 | 0.0698 |
+
+No tier significant at 0.05 on seed 44 either.
+
+Significance, gate_seed45 vs concat_seed45 (gate_seed45 F1s reproduced exactly: 0.9181/0.7155/0.7182):
+
+| Tier | Delta (gate - concat) | 95% CI | Bootstrap p | McNemar p |
+|---|---|---|---|---|
+| Easy | -0.0099 | [-0.0194, -0.0008] | 0.0352 | 0.0350 |
+| Medium | +0.0041 | [-0.0067, 0.0148] | 0.4588 | 0.6514 |
+| Hard | -0.0054 | [-0.0190, 0.0081] | 0.4324 | 0.3803 |
+
+Across all 9 per-seed tier tests, 1 is significant at 0.05 (Easy, seed 45, favouring concat).
+With 9 tests about 0.45 false positives are expected by chance, and these tests ignore training
+randomness, so this is not evidence of a real gate effect.
 
 Seed-noise calibration, gate_seed43 vs gate_seed44 (identical config, only the seed differs):
 
@@ -114,6 +160,151 @@ gives a non-significant one (0.001). Implication: bootstrap/McNemar between two 
 capture test-sampling noise, not training randomness, so single-seed "significant" gaps of
 ~0.02 on Hard are not evidence of an architectural effect. Architecture claims need
 multi-seed comparisons.
+
+---
+
+## 4c. Gate lab round 1 (SCREENING ONLY: validation 5-fold CV, heads on cached seed43 outputs)
+
+Not official test numbers. Heads train on 3/5 of validation, so absolute levels are below the
+end-to-end model; use only for comparing variants. Macro F1, mean +/- SD over 3 head seeds:
+
+| Variant | Easy | Medium | Hard | Macro |
+|---|---|---|---|---|
+| original (checkpoint, optimistic) | 0.9208 | 0.7316 | 0.7104 | 0.7876 |
+| cls_only | 0.9010 | 0.7215 | 0.6712 | 0.7645 |
+| concat (raw) | 0.9231 | 0.7201 | 0.6827 | 0.7753 |
+| concat_ln | 0.9148 | 0.7236 | 0.6685 | 0.7690 |
+| gate (DeSAF copy) | 0.9147 | 0.7211 | 0.6692 | 0.7683 |
+| scaled_overlap | 0.9197 | 0.7170 | 0.6660 | 0.7676 |
+| overlap_gate | 0.9125 | 0.7060 | 0.6535 | 0.7573 |
+| concat_overlap_tier | 0.9290 | 0.7272 | 0.7007 | 0.7857 |
+| overlap_tier_gate | 0.9377 | 0.7325 | 0.7138 | 0.7946 |
+
+Findings: gate = concat_ln again (replicates the end-to-end null). Overlap-only gate does NOT
+help (loses to scaled_overlap on all seeds, -0.010 macro); its gate curve shows no clean flip.
+Tier flag gives the biggest jump (concat_overlap_tier vs concat_overlap: +0.030 macro, +0.049
+Hard). overlap_tier_gate is best (+0.013 Hard over concat_overlap_tier, same sign on 3 seeds),
+but round 1 lacked its strict control and a per-tier-threshold (calibration) check; round 2 adds
+concat_tier, scaled_overlap_tier, tier_gate and the threshold check. Round-1 gate display for tier
+variants normalised each tier separately (bug, fixed in round 2), so its cross-tier signs are not
+interpretable.
+
+**Round 2 (same setup, 2026-10-31/11-01):**
+
+| Variant | Easy | Medium | Hard | Macro |
+|---|---|---|---|---|
+| concat_tier (raw concat + tier flag) | 0.9436 | 0.7389 | 0.7304 | 0.8043 +/- 0.0028 |
+| scaled_overlap_tier | 0.9367 | 0.7372 | 0.7125 | 0.7955 |
+| tier_gate | 0.9379 | 0.7286 | 0.7096 | 0.7920 |
+| overlap_tier_gate (retrained) | 0.9377 | 0.7325 | 0.7138 | 0.7946 |
+
+- Gate verdict: overlap_tier_gate vs scaled_overlap_tier = -0.0008 macro (mixed signs), vs
+  tier_gate = +0.0026 (mixed). Overlap-conditioned gating adds nothing. Hypothesis not supported.
+- Tier flag: concat_tier vs concat = +0.0290 macro, +0.0477 Hard, +0.0188 Medium, same sign on all
+  3 seeds. concat_tier beats overlap_tier_gate (-0.0096 macro, same sign all seeds) and the
+  checkpoint's own (optimistic) validation score 0.7876.
+- Threshold check: per-tier thresholds change macro by -0.003 to +0.002 for every variant,
+  including the checkpoint. The tier gain is NOT calibration; the flag changes feature use.
+- Gate curves (shared reference = Easy at overlap 0), overlap_tier_gate and tier_gate agree:
+  Hard reverses trigram_dissim (about -0.7 to -0.86) and punct_dist (-0.28 to -0.62); Medium
+  reverses fw_dist (-0.46 to -0.85); Easy uses all three normally. Curves are flat across overlap
+  within each tier: the reversal is tied to the tier, not to measured pair overlap. Consistent
+  with within-tier finding (D). Single head (seed 1, fold 0) per variant.
+- Pre-registered next step: --final original,concat,concat_tier,overlap_tier_gate; primary claim
+  concat_tier vs concat on test. Tier flag is legitimate in PAN (separate per-tier test sets) but
+  must be disclosed; it does not apply where the tier is unknown.
+
+**OFFICIAL TEST, pre-registered final run (2026-11-01). Encoder = gated seed43 checkpoint (frozen);
+sequence heads trained on validation (85/15 split), 3 head seeds, test touched once:**
+
+| Model | Easy | Medium | Hard | Macro |
+|---|---|---|---|---|
+| original (seed43 checkpoint, sanity: reproduced exactly) | 0.9286 | 0.7198 | 0.7198 | 0.7894 |
+| concat head (no tier) | 0.9364 +/- 0.0041 | 0.7022 +/- 0.0013 | 0.6944 +/- 0.0048 | 0.7777 +/- 0.0021 |
+| **concat_tier head** | **0.9538 +/- 0.0012** | **0.7331 +/- 0.0046** | **0.7398 +/- 0.0074** | **0.8089 +/- 0.0036** |
+| overlap_tier_gate head | 0.9451 +/- 0.0028 | 0.7261 +/- 0.0046 | 0.7272 +/- 0.0040 | 0.7995 +/- 0.0034 |
+
+(sample SD over 3 head seeds; one encoder only)
+- Primary: concat_tier - concat = +0.0174 / +0.0308 / +0.0455, macro +0.0312; every seed, every tier.
+- Secondary: concat_tier - original = +0.0252 / +0.0133 / +0.0200, macro +0.0195; every seed, every
+  tier above the original. Note this mixes two changes (tier flag + head retrained on validation);
+  the head without the flag is BELOW the original, so the flag accounts for more than all of it.
+- Context: concat_tier test Hard 0.7398 > old 3-way ensemble 0.7350 and > better-call-claude 0.731
+  (official). PAN average-F1 of concat_tier 0.809 sits between openfact (0.814) and cornell-1 (0.800).
+- Final-model gate curve (overlap_tier_gate, seed 1): Hard reverses trigram_dissim at every overlap
+  (-0.21 to -0.90) and mostly fw_dist; Medium does NOT reverse fw_dist in this model, and Hard punct
+  is not reversed here. The ONLY reversal consistent across all three tier-aware gate models
+  (CV overlap_tier_gate, CV tier_gate, final overlap_tier_gate) is trigram_dissim on Hard, which is
+  also the strongest Easy-vs-Hard contrast in the data (G: Easy +0.62 N, Hard -0.72 R).
+- Per-seed significance on test (compute_significance, bootstrap / McNemar; Delta = A - B, so
+  negative = tier head better):
+
+| Comparison | Tier | Seed 1 | Seed 2 | Seed 3 |
+|---|---|---|---|---|
+| concat vs tier | Easy | -0.0119, p<.0001 / <.0001 | -0.0223, <.0001 / <.0001 | -0.0181, <.0001 / <.0001 |
+| concat vs tier | Medium | -0.0340, <.0001 / .0176 | -0.0270, <.0001 / .0014 | -0.0316, <.0001 / .0043 |
+| concat vs tier | Hard | -0.0550, <.0001 / <.0001 | -0.0408, <.0001 / <.0001 | -0.0407, <.0001 / <.0001 |
+| original vs tier | Easy | -0.0241, <.0001 / <.0001 | -0.0265, <.0001 / <.0001 | -0.0250, <.0001 / <.0001 |
+| original vs tier | Medium | -0.0179, .0024 / .7896 | -0.0086, .1302 / .0082 | -0.0132, .0126 / .0035 |
+| original vs tier | Hard | -0.0270, <.0001 / <.0001 | -0.0123, .0810 / <.0001 | -0.0207, .0018 / <.0001 |
+
+  Tier flag vs no flag: significant on both tests for all 9 seed x tier cells. Tier head vs original
+  DeSAF: Easy significant on all seeds; Hard and Medium significant on 2 of 3 seeds by bootstrap.
+  These tests cover test-sample noise only, not encoder training randomness (next: seed44/45 encoders).
+
+**ALL THREE ENCODERS (seed43/44/45 gated checkpoints, frozen) x 3 head seeds, official test
+(2026-11-01). Caches reproduced each checkpoint's official F1 exactly.**
+
+| Encoder | Head | Easy | Medium | Hard |
+|---|---|---|---|---|
+| 44 | original | 0.9315 | 0.7229 | 0.7019 |
+| 44 | concat s1/s2/s3 | 0.9340/0.9417/0.9413 | 0.7060/0.7194/0.6926 | 0.7029/0.7112/0.6872 |
+| 44 | concat_tier s1/s2/s3 | 0.9513/0.9497/0.9549 | 0.7410/0.7368/0.7356 | 0.7281/0.7462/0.7388 |
+| 45 | original | 0.9181 | 0.7155 | 0.7182 |
+| 45 | concat s1/s2/s3 | 0.9247/0.9222/0.9295 | 0.7026/0.6983/0.7172 | 0.6905/0.7218/0.6979 |
+| 45 | concat_tier s1/s2/s3 | 0.9456/0.9499/0.9487 | 0.7382/0.7250/0.7365 | 0.7365/0.7523/0.7466 |
+
+Encoder-level summary (mean over encoders of the per-encoder head mean; SD across the 3 encoders):
+
+| Model | Easy | Medium | Hard | Macro |
+|---|---|---|---|---|
+| Original DeSAF | 0.9261 +/- 0.0071 | 0.7194 +/- 0.0037 | 0.7133 +/- 0.0099 | 0.7863 +/- 0.0028 |
+| Head without tier flag | 0.9336 +/- 0.0072 | 0.7048 +/- 0.0022 | 0.6994 +/- 0.0046 | 0.7793 +/- 0.0022 |
+| **Tier-aware head** | **0.9513 +/- 0.0029** | **0.7347 +/- 0.0027** | **0.7409 +/- 0.0038** | **0.8090 +/- 0.0002** |
+
+- Tier-aware head beats the original DeSAF in 27/27 (encoder x head seed x tier) cells, and beats the
+  no-flag head in 27/27. Its WORST run on each tier beats the original's BEST seed on that tier
+  (Easy 0.9456 > 0.9315, Medium 0.7250 > 0.7229, Hard 0.7281 > 0.7198).
+- Paired t-test across the 3 encoders (covers encoder training randomness), tier head vs original:
+  Easy p = 0.012, Medium p = 0.007, Hard p = 0.026, macro p = 0.005. Tier vs no-flag head: p = 0.024,
+  0.002, 0.003.
+- Mean gain over original: Easy +0.025, Medium +0.015, Hard +0.028, macro +0.023.
+- Disclose in the paper: (1) the tier flag uses PAN's per-tier test-set split, not available for an
+  arbitrary document; (2) the head is retrained on the official validation set with the encoder
+  frozen; the test set is used only for this pre-registered evaluation.
+
+**Can the tier be inferred from the text? (scripts/predict_tier.py, 2026-11-01)**
+- Text-only document features (24: boundaries, overlap stats, 3 surface distances, style L2), gradient
+  boosting chosen by validation CV (0.762; logistic regression 0.724). TEST accuracy 0.762.
+  Recall: Easy 0.829, Medium 0.702, Hard 0.756 (Medium mostly confused with Hard: 195/900).
+- Validation medians: mean consecutive overlap Easy 0.047, Medium 0.050, Hard 0.090; share > 0.075
+  Easy 0.222, Medium 0.222, Hard 0.429; mean style L2 Easy 104.9, Medium 64.1, Hard 68.1.
+- Same trained tier-aware heads fed PREDICTED tiers (hard argmax), all 3 encoders x 3 heads, mean:
+  Easy 0.9116, Medium 0.6975, Hard 0.6746, macro 0.7613. That is BELOW the no-flag head (0.7793)
+  and the original DeSAF (0.7863). A wrong tier is worse than no tier, consistent with the tier
+  reversing feature use. (True-tier numbers reproduced exactly in this rerun: deterministic.)
+- With encoder features (795 per document: text features + mean [CLS] + predicted-change stats):
+  validation CV 0.845-0.853, TEST accuracy 0.861 / 0.863 / 0.853 (encoders 43/44/45). Medium is still
+  the most confused (recall ~0.81, mostly predicted as Hard).
+- Soft predicted tiers (probabilities) into the true-tier-trained heads, 3 encoders x 3 heads:
+  Easy 0.9259, Medium 0.7111, Hard 0.7033, macro 0.7801 (about the no-flag head's 0.7793; below the
+  original DeSAF 0.7863 in 9/9 runs).
+- Heads trained on out-of-fold predicted validation tiers and tested on predicted tiers:
+  Easy 0.9341, Medium 0.7132, Hard 0.6855, macro 0.7776 (above the original in 1/9 runs).
+- CONCLUSION: the tier-aware gain needs the true tier, which PAN provides via per-tier test sets.
+  Inferring the tier from the text (86% at best) does not recover it; predicted tiers bring the
+  model back to about the no-flag level. Consistent with the tier setting the direction of the
+  stylometric evidence. Report as a limitation; do not claim the method works without tier labels.
 
 ---
 
@@ -238,10 +429,76 @@ Citation corrections needed in the paper:
   reproduce the headline numbers exactly.
 - Seed-noise calibration (seed43 vs seed44): Hard differs significantly from seed alone.
 
+**(G) Feature direction by tier and overlap (scripts/feature_direction_by_tier.py, seed43_gate
+cache, validation+test, 68,028 boundaries; first run used Cohen's d + Mann-Whitney):**
+
+| Tier | Subset (n) | fw_dist | trigram_dissim | punct_dist | style_L2 (193) |
+|---|---|---|---|---|---|
+| Easy | all (20,575) | -0.203 R*** | +0.621 N*** | +0.469 N*** | +1.284 N*** |
+| Easy | overlap <= 0.075 (15,661) | -0.291 R*** | +0.656 N*** | +0.334 N*** | +1.237 N*** |
+| Easy | overlap > 0.075 (4,914) | +0.387 N** | +0.693 N*** | +1.484 N*** | +2.866 N*** |
+| Medium | all (25,725) | +0.253 N*** | +0.086 N | +0.018 N*** | -0.086 R*** |
+| Medium | overlap <= 0.075 (19,421) | +0.233 N*** | -0.222 R*** | -0.014 R*** | -0.107 R*** |
+| Medium | overlap > 0.075 (6,304) | +0.086 N* | +0.225 N*** | +0.007 N* | +0.065 N |
+| Hard | all (21,728) | -0.328 R*** | -0.720 R*** | +0.066 N*** | -0.509 R*** |
+| Hard | overlap <= 0.075 (12,745) | -0.473 R*** | -0.704 R*** | +0.539 N | -0.453 R*** |
+| Hard | overlap > 0.075 (8,983) | -0.077 R*** | -0.250 R*** | -0.103 R** | -0.462 R*** |
+
+(N = more dissimilar at a change = normal, R = reversed; values are Cohen's d.)
+Composition: share of boundaries with overlap > 0.075 is Easy 0.239, Medium 0.245, Hard 0.413;
+Hard is 26.6% of low-overlap boundaries but 44.5% of high-overlap boundaries.
+
+Reading:
+- Hard is reversed at both overlap levels on fw_dist, trigram and style_L2; Easy is normal at both
+  levels on trigram, punct and style_L2. Direction is set mainly by the tier.
+- Within a tier, higher overlap does NOT bring inversion (Easy style_L2 d 1.24 -> 2.87; Medium
+  style_L2 -0.11 -> +0.07; Hard -0.45 -> -0.46). The pooled "inversion rises with overlap" trend
+  (finding C) is therefore a tier-composition effect (Simpson's paradox), not a within-tier effect.
+  REVISE finding C in the paper accordingly. Consistent with finding D.
+- Medium: features disagree (fw normal, trigram/style reversed at low overlap) and two features flip
+  with overlap inside Medium, so aggregate distance cancels: a mechanism for Medium's instability.
+- Some cells have mean-based d and rank-based p disagreeing (e.g. Hard punct low overlap d +0.54,
+  n.s.), so the script was switched to rank-based AUC for the paper figure.
+
+**(G') AUC version (USE THIS IN THE PAPER). AUC = P(change boundary more dissimilar than a
+no-change boundary); > 0.5 normal (N), < 0.5 reversed (R). Validation + test, 68,028 boundaries:**
+
+| Tier | Subset (n) | fw_dist | trigram_dissim | punct_dist | style_L2 (193) |
+|---|---|---|---|---|---|
+| Easy | all (20,575) | 0.430*** R | 0.772*** N | 0.701*** N | 0.833*** N |
+| Easy | overlap <= 0.075 (15,661) | 0.410*** R | 0.687*** N | 0.653*** N | 0.828*** N |
+| Easy | overlap > 0.075 (4,914) | 0.588** N | 0.896*** N | 0.814*** N | 0.898*** N |
+| Medium | all (25,725) | 0.586*** N | 0.503 N (n.s.) | 0.457*** R | 0.482*** R |
+| Medium | overlap <= 0.075 (19,421) | 0.584*** N | 0.428*** R | 0.426*** R | 0.477*** R |
+| Medium | overlap > 0.075 (6,304) | 0.523* N | 0.581*** N | 0.522* N | 0.519 N (n.s.) |
+| Hard | all (21,728) | 0.417*** R | 0.260*** R | 0.429*** R | 0.339*** R |
+| Hard | overlap <= 0.075 (12,745) | 0.410*** R | 0.338*** R | 0.489 R (n.s.) | 0.358*** R |
+| Hard | overlap > 0.075 (8,983) | 0.477*** R | 0.394*** R | 0.482** R | 0.365*** R |
+
+Composition: share with overlap > 0.075 is Easy 0.24, Medium 0.25, Hard 0.41; Hard is 27% of
+low-overlap and 44% of high-overlap boundaries.
+- Hard: all four features reversed at both overlap levels (trigram AUC 0.260 overall). The d-based
+  table's "Hard punct normal" was an outlier effect; rank-based AUC shows it reversed.
+- Easy: trigram, punct, style normal at both levels; fw reversed at low overlap, normal at high.
+- Medium: features disagree and trigram/punct flip with overlap inside the tier; all near 0.5.
+- Within Hard, reversal is not stronger at high overlap (trigram 0.338 low vs 0.394 high).
+- Agrees with the validation-CV tier-aware gate curves (Hard trigram + punct reversed vs Easy; Medium
+  fw opposite to Easy).
+
+---
+
 ## Still open / not yet done
 
-- Concat ablation seeds 44 and 45 (running), then a 3-seed gate vs 3-seed concat
-  comparison (mean +/- SD), plus per-seed significance tests.
+- Gate vs concat: DONE for 3 seeds, with per-seed significance for all 3 (section 4b).
+- Gate lab: DONE. Overlap gating does not help; the tier-aware head is the robust win on all 3
+  encoders (section 4c). Rerun feature_direction_by_tier.py with the AUC version for the figure.
+- Optional: test whether the tier can be predicted from the document itself (removes the "tier is
+  given by PAN" caveat); optional end-to-end tier-aware DeSAF trained on the train set.
+- REVISE finding C (pooled overlap trend) in the paper: it is a Simpson's-paradox composition effect (G).
+  Cache built 2026-10-31 as `seed43_gate`; it reproduced the seed43 test F1 exactly
+  (0.9286/0.7198/0.7198 at threshold 0.50). Gated seed43 VALIDATION F1 at 0.50:
+  0.9213/0.7343/0.7116. Topic overlap (TF-IDF fit on train): validation mean 0.0699,
+  median 0.0270, 30% of boundaries above 0.075; test mean 0.0693, median 0.0262, 29% above.
 - Check whether the Hard ensemble gain (0.7097 -> 0.7350) holds on seeds 44/45; the
   original number is single-seed and the seed noise on Hard is ~0.018.
 - Do NOT present the contrastive Hard gain (+0.003) as an improvement; it is far below
