@@ -1631,6 +1631,55 @@ corrected text. Only the --score-only lines are official-metric numbers; gate_la
 
 ---
 
+**Literature read in full, 2026-11-17 (uploaded PDFs; one reader per paper, claims checked against the text with page
+numbers).**
+
+- Wegmann, Schraagen and Nguyen (2022), "Same Author or Just Same Topic? Towards Content-Independent Style
+  Representations", Proc. 7th Workshop on Representation Learning for NLP (RepL4NLP), pp. 249-268, ACL. Reddit
+  authorship verification with siamese RoBERTa; different-author texts drawn from the same conversation, the same
+  subreddit, or at random. Citable: style and content are correlated, so representations trained for authorship
+  verification can encode content instead of style (p.249); how the different-author pairs are sampled changes what the
+  model learns and how well it scores: the model trained on random pairs reaches AUC .79 on random test pairs but .58 on
+  conversation-matched ones (Table 2, p.253), and training on conversation-matched pairs gives the most
+  content-independent representations (STEL-Or-Content 0.05 -> 0.42, p.255). Do NOT cite it for anything about style
+  change detection, PAN, cue reversal, or its own test of function words (it only restates Litvinova 2020, which we
+  have not read).
+- Mikros and Argiri (2007), "Investigating topic influence in authorship attribution", Proc. SIGIR '07 Workshop on
+  Plagiarism Analysis, Authorship Identification, and Near-Duplicate Detection (PAN), Amsterdam. 200 Greek newspaper
+  articles, 2 authors x 2 topics. Citable: stylometric variables commonly assumed topic-neutral correlate with topic
+  (topic classified at 79.5% from stylometric variables alone, p.4); several of the 10 most frequent function words and
+  12 of 32 letter frequencies vary with topic (p.5); "authorship attribution could become a by-product of the
+  correlation of authors with specific topics" (p.6); word and sentence length are among the oldest authorship features
+  (p.2). Do NOT cite it for character n-grams, punctuation (not measured), sentence length tracking topic (only an
+  interaction), or stylometry failing (a topic-neutral subset still gives 93%).
+- Koppel, Schler and Argamon (2011), "Authorship attribution in the wild", Language Resources and Evaluation 45:83-94,
+  doi:10.1007/s10579-009-9111-2. Citable: character n-gram statistics capture both content and writing style (p.86);
+  attribution gets much harder with many candidate authors and short texts (pp.84-89). Do NOT cite it for topic-control
+  experiments, function words or how pairs are built. The uploaded paper is the 2011 one; "Koppel et al. (2007)"
+  (unmasking) was not read and is not cited.
+- Koppel, Schler, Argamon and Winter (2012), "The 'Fundamental Problem' of Authorship Attribution", English Studies
+  93(3):284-291, doi:10.1080/0013838X.2012.668794 (read in full by the main session). Citable: the "fundamental problem"
+  is "given two (possibly short) documents, determine if they were written by a single author or not" (p.284), a
+  building block for other attribution problems; the unmasking principle "two texts are probably by different authors if
+  the differences between them are robust to changes in the underlying feature set" (p.285); their impostor method picks
+  impostors among the texts most similar to the input "to ensure that the impostors at least roughly resemble" it
+  (p.289), with 90% precision and 83% recall on blog pairs. Do NOT cite it for topic confounds or style change detection.
+- ICNLP 2027 submission rules (Submission Guide page, pasted by the user 2026-11-17): minimum 4 and maximum 5 printed
+  pages including figures without extra page charges; papers over 10 pages are not accepted; official LaTeX template =
+  IEEE conference template (IEEEtran V1.8b, conference_101719.tex; "Sub-titles are not captured in Xplore and should not
+  be used"); submission via zmeeting.org/submission/icnlp2027; no parallel submission elsewhere during review. Review mode
+  (anonymous or not) is not stated on the pasted page; the template has a named author block.
+
+**Implementation details used in the paper, confirmed from the code (not from a log), 2026-11-17:** supervised
+contrastive loss weight 0.3 and temperature 0.1 (train_deberta_fusion.py defaults, passed explicitly in the run
+scripts); function-word distance over 135 function words and punctuation distance over 11 marks
+(pan_feature_direction.py FUNCTION_WORDS / PUNCT); constructions use 2 to 6 consecutive sentences per author
+(construction_experiment.py), same_topic draws from the 5 sources closest in content, length and style splices draw
+from 20 random sources; curriculum = Easy, then Easy + Medium, then all three levels (train_deberta_fusion.py
+--curriculum help text: "Easy -> Easy+Medium -> All tiers"), phases 2, 2, 8 epochs.
+
+---
+
 ## Still open / not yet done
 
 Added 2026-11-16:

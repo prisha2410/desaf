@@ -51,7 +51,7 @@ two neighbouring sentences
           one probability per boundary: author change or not
 ```
 
-Training uses the PAN 2025 training split only. The model sees Easy, then Medium, then Hard documents (2, 2 and 8 epochs) with an extra contrastive loss. The decision threshold is chosen on the validation split.
+Training uses the PAN 2025 training split only. The model first trains on Easy documents (2 epochs), then on Easy and Medium (2 epochs), then on all three levels (8 epochs), with an extra contrastive loss. The decision threshold is chosen on the validation split.
 
 The learned gate is not what makes DeSAF work. A plain concatenation of the two inputs scores the same (no difference survives correction for multiple tests over three seeds). We keep the gate because the headline runs used it.
 
@@ -99,7 +99,7 @@ We then trained a level classifier (DeBERTa-v3-small reading the start and end o
 ## What we do not claim
 
 - That PAN built Hard with our recipe. We show the recipe is enough to cause the flip.
-- That stylometry fails in general. On Easy, on PAN 2026 Hard and on randomly joined text the clues point the normal way.
+- That stylometry fails in general. On randomly joined text the clues point the normal way, and so do most of them on PAN 2026 Hard and on Easy (on Easy, function words are the exception).
 - That the oracle tier result is a deployable system. Real text does not come with a level label, and our learned level classifier did not recover the gain.
 - That level routing cannot work. We tried one classifier on one dataset.
 - That the PAN winners rely on the repeated lines too. Their predictions are not public, so we cannot test it.
@@ -177,8 +177,8 @@ REAL_VERIFIED_NUMBERS.md   the full lab notebook: every checked number and its c
 Setup (Python 3.10 or newer, one GPU; we used an RTX 3050 with 4 GB):
 
 ```bash
-git clone https://github.com/prisha2410/sass-tad.git
-cd sass-tad
+git clone https://github.com/prisha2410/desaf.git
+cd desaf
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
