@@ -1,26 +1,11 @@
-# Core NLP
-spacy>=3.7.0
-nltk>=3.8.1
-
-# Readability
-textstat>=0.7.3
-
-# ML / numerics
-numpy>=1.26.0
-scikit-learn>=1.4.0
-torch>=2.2.0
-sentence-transformers>=2.6.0
-
-# Adversarial training
-# (no extra dep — GRL implemented manually in src/models/)
-
-# Evaluation
-pandas>=2.2.0
-
-# Explainability
-shap>=0.45.0
-captum>=0.7.0
-
-# Utilities
-tqdm>=4.66.0
-pyyaml>=6.0.1
+﻿# Exact versions from the environment that produced the paper's numbers.
+# After installing, also run: python -m spacy download en_core_web_sm
+torch==2.5.1
+transformers==4.44.0
+sentencepiece==0.2.1
+protobuf==7.35.1
+numpy==1.26.4
+scipy==1.15.3
+scikit-learn==1.7.2
+spacy==3.8.14
+pytest==9.0.3

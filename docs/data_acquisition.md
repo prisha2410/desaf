@@ -1,67 +1,53 @@
-# Data Acquisition Guide
+# Getting the data
 
-## Overview
+The data is not in this repository. PAN data is for research use only and must not be redistributed, so `data/` is in `.gitignore`.
 
-This project uses **PAN 2024** and **PAN 2025** as primary benchmarks — both sentence-level style change detection datasets with three tiers (Easy / Medium / Hard) based on topic control.
+## PAN 2025 style change detection (main data)
 
----
+This is the only data DeSAF is trained on.
 
-## PAN 2024
+1. Register at [tira.io](https://www.tira.io).
+2. Request access on Zenodo with the same email: [zenodo.org/records/14891299](https://zenodo.org/records/14891299).
+3. Unpack the train, validation and test splits (the test labels were released after the competition) into:
 
-**Granularity:** Sentence-level
-**Tiers:** Easy (topic-diverse), Medium (partial topic control), Hard (strict topic control)
-**Format:** `problem-X.txt` (one sentence per line) + `truth-problem-X.json` (with a `changes` list)
-
-**Access (two steps):**
-1. Register at [tira.io](https://www.tira.io)
-2. Request access using the **same email** as your TIRA account:
-   [pan.webis.de/clef24/pan24-web/style-change-detection.html](https://pan.webis.de/clef24/pan24-web/style-change-detection.html)
-
-**Place files at:**
 ```
-data/raw/pan2024/
-├── easy/
-│   ├── train/
-│   └── validation/
-├── medium/
-│   ├── train/
-│   └── validation/
-└── hard/
-    ├── train/
-    └── validation/
+data/raw/pan2025_full/
+  easy/
+    train/        problem-1.txt, truth-problem-1.json, ...
+    validation/
+    test/
+  medium/
+    train/
+    validation/
+    test/
+  hard/
+    train/
+    validation/
+    test/
 ```
 
----
+Each `problem-X.txt` has one sentence per line. Each `truth-problem-X.json` has a `changes` list with one 0 or 1 per pair of neighbouring sentences.
 
-## PAN 2025
+`src/utils/data_loader.py` reads this folder with `load_pan2025_full("data/raw", tier, split)`. Most scripts take `--data-root data/raw`; a few (for example `construction_experiment.py`) take the `pan2025_full` folder itself, which their docstrings say.
 
-**Granularity:** Sentence-level (same format as PAN 2024)
-**Tiers:** Easy / Medium / Hard
+Size: 4,200 training, 900 validation and 900 test documents per level.
 
-**Access (two steps):**
-1. Register at [tira.io](https://www.tira.io)
-2. Request access using the **same email** as your TIRA account:
-   [zenodo.org/records/14891299](https://zenodo.org/records/14891299)
+## PAN 2026 (one comparison only)
 
-**Place files at:**
+Used only to compare the direction of the writing-style clues between the 2025 and 2026 Hard levels. Not used for training. Get it from the PAN 2026 multi-author writing style analysis page (Zenodo, access through TIRA) and pass its folder with `--data-root`, for example:
+
 ```
-data/raw/pan2025/
-├── easy/
-│   ├── train/
-│   └── validation/
-├── medium/
-│   ├── train/
-│   └── validation/
-└── hard/
-    ├── train/
-    └── validation/
+python scripts/pan_feature_direction.py --data-root "D:\mawsa26-pan-zenodo" --name pan2026
 ```
 
----
+## Reuters C50 (cross-domain check)
 
-## Important Notes
+News articles by 50 authors, used to build multi-author documents from naturally written text. Download "Reuter_50_50" from the UCI Machine Learning Repository and pass the folder that contains `C50train/` and `C50test/`:
 
-- PAN datasets contain copyrighted material — **research use only, no redistribution**
-- Do **not** commit data files — `data/` is gitignored
-- Test set ground truth is **not publicly released** — reported numbers use the validation split unless stated otherwise
-- Precomputed DeBERTa features (`.npz`) go in `data/processed/features_finetuned/` — also gitignored
+```
+python scripts/c50_multiauthor_test.py --c50-dir "C:\path\to\reuter+50+50"
+```
+
+## What is never committed
+
+`data/`, `checkpoints/`, `results/`, model files (`*.pt`, `*.npz`) and the virtual environment. See `.gitignore`.

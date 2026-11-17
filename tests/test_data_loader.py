@@ -1,5 +1,5 @@
 """
-Unit tests for data_loader.py — synthetic fixtures, no real dataset needed.
+Unit tests for data_loader.py: synthetic fixtures, no real dataset needed.
 
 Run with:
     pytest tests/test_data_loader.py -v
@@ -15,6 +15,7 @@ from src.utils.data_loader import (
     split_documents,
     load_pan_labeled,
     dataset_stats,
+    load_pan2025_full,
 )
 
 
@@ -116,11 +117,6 @@ class TestPANDataset:
         docs = PANDataset(root, "2025", "easy").load()
         assert all(d.source == "pan2025" for d in docs)
 
-    def test_pan2023_tier_mapping(self, tmp_path):
-        root = _make_pan_dir(tmp_path, "2023", "hard", n_docs=4)
-        docs = PANDataset(root, "2023", "hard").load()
-        assert len(docs) == 4
-
     def test_invalid_year_raises(self, tmp_path):
         with pytest.raises(ValueError, match="Unsupported year"):
             PANDataset(tmp_path, "2020", "hard")
@@ -136,7 +132,7 @@ class TestPANDataset:
         assert len(ids) == len(set(ids))
 
     def test_all_years_load(self, tmp_path):
-        for year in ["2023", "2024", "2025"]:
+        for year in ["2024", "2025"]:
             root = _make_pan_dir(tmp_path / year, year, "easy", n_docs=4)
             docs = PANDataset(root, year, "easy").load()
             assert len(docs) == 4
@@ -228,3 +224,37 @@ class TestDatasetStats:
         stats = dataset_stats(docs)
         assert stats["n_labeled"] == 0
         assert stats["change_rate"] == 0.0
+
+# --------------------------------------------------------------------------- #
+#  load_pan2025_full (the loader every paper script uses)
+# --------------------------------------------------------------------------- #
+
+def _make_pan2025_full(tmp_path, tier="hard", split="test", n_docs=3):
+    split_dir = tmp_path / "pan2025_full" / tier / split
+    split_dir.mkdir(parents=True, exist_ok=True)
+    for i in range(1, n_docs + 1):
+        sents = [f"Sentence {j} of document {i}." for j in range(1, 6)]
+        (split_dir / f"problem-{i}.txt").write_text("\n".join(sents), encoding="utf-8")
+        (split_dir / f"truth-problem-{i}.json").write_text(
+            json.dumps({"authors": 2, "changes": [0, 1, 0, 0]}), encoding="utf-8")
+    return tmp_path
+
+
+class TestLoadPan2025Full:
+
+    def test_reads_the_requested_split(self, tmp_path):
+        root = _make_pan2025_full(tmp_path, "hard", "test", n_docs=3)
+        docs = load_pan2025_full(root, tier="hard", split="test")
+        assert len(docs) == 3
+        assert all(d.split == "test" for d in docs)
+        assert all(len(d.boundary_labels) == len(d.sentences) - 1 for d in docs)
+
+    def test_doc_ids_name_tier_and_split(self, tmp_path):
+        root = _make_pan2025_full(tmp_path, "easy", "validation", n_docs=2)
+        docs = load_pan2025_full(root, tier="easy", split="validation")
+        assert all(d.doc_id.startswith("pan2025full_easy_validation_problem-") for d in docs)
+        assert all(d.split == "val" for d in docs)
+
+    def test_missing_split_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            load_pan2025_full(tmp_path, tier="medium", split="train")
