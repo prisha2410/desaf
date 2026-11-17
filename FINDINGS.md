@@ -120,6 +120,17 @@ Numbers only, no mechanism sentence (that was the rule fixed before the run).
 - Reddit test text: all four splice recipes are below random (-0.019 to -0.028) and are not separated from one another.
 - **Do not write:** "a style splice costs about half as much".
 
+### 2h. Can the clues alone find changes? [(Q)]
+
+**We write:** "On Hard the clue model reaches 0.696, and the clues help only when read in the reversed direction: forced to read all five the classical way, the model is at chance (0.497); forced to read them reversed, it keeps 0.677. A clue model fitted on Easy ranks Hard boundaries worse than chance (ROC-AUC 0.221), and the reverse (0.203). Without the level as an input, the clues lose 0.081 on Hard and rank Hard boundaries worse (ROC-AUC 0.685), consistent with clues that point opposite ways across levels."
+
+- Model: gradient-boosted trees on the five clues, one per level; threshold chosen on validation with the official measure. A random guess at the change rate scores about 0.5 under that measure (0.489 / 0.492 / 0.505 in the run), above predict-0 (0.439 / 0.440 / 0.453), so gains are measured from 0.5.
+- Share of the gain over 0.5 on Hard: with the level, roughly half to two-thirds of the true-level head's (0.570); without it, a minority of DeSAF's (0.353).
+- DeSAF is 0.123 to 0.134 above the per-level clue model on Hard on every seed (paired intervals exclude 0), although only the clue model gets the level.
+- The reversed-direction model kept 90.3% of the full clue model's gain; the bar was 90%, so it passed only narrowly.
+- Relative position alone reaches ROC-AUC 0.633 / 0.618 / 0.586, but it partly encodes document length (on Hard, document length alone gives 0.614).
+- **Do not write:** "position carries little signal" (the test failed), "DeSAF learns the clues", "the clues explain DeSAF".
+
 ## Finding 3: The level flag helps, but only when it is right
 
 ### 3a. The oracle gain [section 11, (N)]
@@ -192,6 +203,7 @@ Report these. They make the rest more believable.
 - Recipes: the critic's prediction for topic_rawstyle (meets C1, C2, C5) was partly wrong, and the expectation that cues a recipe does not select on stay normal failed for topic_length (punctuation and readability also reversed) [(O)].
 - Boilerplate masking: neither pre-registered sentence triggered [(O)].
 - Router: predicted test accuracy 0.88-0.95, got 0.854; the router-fed head does not recover the gain [(P)].
+- Clue baselines: relative position alone was predicted to reach ROC-AUC at most 0.55 on every level; it reached 0.59-0.63 [(Q)].
 
 ## Limitations to state
 

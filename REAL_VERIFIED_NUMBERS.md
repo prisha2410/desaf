@@ -1631,6 +1631,79 @@ corrected text. Only the --score-only lines are official-metric numbers; gate_la
 
 ---
 
+**(Q) Clue-only and position-only baselines, clue_baselines.py version 2, run by the user 2026-11-17. Log:
+logs_user/clue_baselines.log (results/clue_baselines.json on the user's machine). CPU, 550 s. Official metric
+(pooled two-class macro-F1) unless stated; thresholds chosen on VALIDATION with the official metric; TEST scored once.**
+
+- History of the rules. Version 1 (written earlier on 2026-11-17, never run on real data) measured gains from predict-0.
+  A code review on synthetic data showed predict-0 is below the 0.5 that a guess at the change rate reaches, so a
+  no-signal model gained about +0.05 for free, and that v1's position features revealed document length. Version 2
+  (gains from 0.5; relative position only; sign vectors printed; Q4r added) was fixed in the docstring before this run.
+  A second check of v2 was still running when the log arrived; the rules were not changed after the log was seen.
+  Its code lens (finished after the run) found no wrong number and no crash (also run under Python 3.10 / sklearn 1.3).
+  Its rule-stress lens was lost in a container restart and was not rerun (the results were already seen).
+  Two rule-level caveats from the code lens: (a) the 'relative position' feature takes fine fractions k/(n-1), so it
+  still partly encodes document length; on Easy and Medium position alone (AUC 0.633 / 0.618) beats document length
+  alone (0.529 / 0.554), but on Hard position (0.586) is below document length (0.614), so the Hard position signal may
+  be length. Paper wording: "relative position alone, which partly encodes document length, reaches ROC-AUC 0.59 to
+  0.63". (b) gbt_rev signs come from point TRAIN AUCs without CIs; irrelevant here, since all five Hard TRAIN AUCs are
+  far from 0.5 (0.258-0.430 on 51,062 boundaries).
+- Sanity checks, all pass. Boundaries train 48,402 / 58,817 / 51,062, validation 10,247 / 12,759 / 10,648, test
+  10,328 / 12,966 / 11,080 (test change rates 21.67 / 21.57 / 17.25%, as in section 7). predict-0 0.439 / 0.440 / 0.453
+  (= (1-p)/(2-p) exactly). Random score through the same threshold search 0.489 / 0.492 / 0.505 (about 0.5). 42 test lines
+  occur >= 10 times; boundaries not touching them 79.2 / 73.5 / 95.8% (touching 20.8 / 26.5 / 4.2%, as in the paper).
+  DeSAF files reproduce their verified Hard macro-F1: seed43 0.8301, seed44 0.8190, seed45 0.8293.
+- Clue AUCs on TRAIN (content, length, function words, trigrams, punctuation): Easy 0.624 / 0.784 / 0.416 / 0.771 / 0.713;
+  Medium 0.563 / 0.476 / 0.591 / 0.505 / 0.452; Hard 0.282 / 0.289 / 0.421 / 0.258 / 0.430 (all five reversed on Hard;
+  close to the validation values in the paper's Table II and text). gbt_rev signs: Easy [+,+,-,+,+], Medium [+,-,+,+,-],
+  Hard [-,-,-,-,-].
+- Test macro-F1 Easy / Medium / Hard [95% CI, 2,000 document resamples], and test ROC-AUC Easy / Medium / Hard:
+  * random 0.489 / 0.492 / 0.505; AUC Hard 0.504.
+  * best single clue (Easy length, Medium function words, Hard trigrams read reversed) 0.713 / 0.535 / 0.638
+    [Hard 0.627, 0.648]; AUC 0.779 / 0.577 / 0.739.
+  * logistic regression 0.713 / 0.565 / 0.666; AUC 0.839 / 0.625 / 0.800.
+  * gbt (five clues, per level) 0.794 / 0.649 / 0.696 [Hard 0.685, 0.706]; AUC 0.913 / 0.761 / 0.843.
+  * gbt_rev (each clue monotone in its own TRAIN direction; on Hard all five reversed) 0.740 / 0.585 / 0.677
+    [Hard 0.666, 0.686]; AUC 0.863 / 0.670 / 0.815.
+  * gbt_cls (all five monotone in the classical direction) 0.717 / 0.549 / 0.497 [Hard 0.488, 0.506]; AUC 0.847 / 0.637 /
+    0.515.
+  * pooled gbt, no level input, one threshold 0.711 / 0.568 / 0.615 [Hard 0.604, 0.625]; AUC 0.819 / 0.672 / 0.685.
+    With per-level thresholds 0.721 / 0.574 / 0.615 (Hard threshold identical, gap 0.000).
+  * pooled logistic, one threshold 0.704 / 0.460 / 0.453; Hard AUC 0.412 (below chance).
+  * relative position only 0.560 / 0.561 / 0.534; AUC 0.633 / 0.618 / 0.586. Structure (index, index from end,
+    relative position, number of sentences) 0.577 / 0.598 / 0.574; AUC 0.659 / 0.677 / 0.641. Number of sentences only
+    0.505 / 0.512 / 0.564; AUC 0.529 / 0.554 / 0.614.
+  * Hard without repeated-line boundaries: gbt 0.684, gbt_rev 0.672, gbt_cls 0.455, pooled gbt 0.602 (same picture).
+- Cross-level transfer (logistic fitted on one level's TRAIN, ROC-AUC on another level's TEST [95% CI, 500 document
+  resamples]): Easy -> Hard 0.221 [0.212, 0.232]; Hard -> Easy 0.203 [0.194, 0.213]; Easy -> Medium 0.499; Medium -> Easy
+  0.363; Medium -> Hard 0.399; Hard -> Medium 0.507. Own level: 0.839 / 0.625 / 0.800.
+- Logistic partial coefficients on Hard TRAIN (standardised): content -0.44 [-0.50, -0.36], length -1.44 [-1.49, -1.39],
+  function words +0.08 [+0.04, +0.13], trigrams -0.13 [-0.41, +0.13], punctuation +0.70 [+0.64, +0.77]. With the other
+  clues held fixed, function words and punctuation point the usual way on Hard, in line with the length-led pattern in
+  the paper (both lose their reversal at matched length). Descriptive only; no rule.
+- Paired gaps on Hard (2,000 document resamples): gbt - single +0.058 [+0.048, +0.068]; gbt - pooled gbt (per-level
+  threshold) +0.081 [+0.070, +0.092] (one threshold: the same); gbt_rev - gbt_cls +0.180 [+0.166, +0.193]; logistic -
+  pooled logistic +0.206. DeSAF - gbt: seed43 +0.134 [+0.121, +0.147], seed44 +0.123 [+0.110, +0.136], seed45 +0.134
+  [+0.119, +0.146]. DeSAF - pooled gbt: +0.215 / +0.204 / +0.215 (all CIs exclude 0). ROC-AUC gaps (500 resamples): gbt -
+  pooled gbt +0.158 [+0.148, +0.168]; logistic - pooled logistic +0.388 [+0.369, +0.403].
+- Fixed-before-running checks (version 2): Q1 holds (+0.058). Q2 holds narrowly: gains over 0.5 on Hard gbt +0.196,
+  gbt_rev +0.177 (90.3% of gbt's; the bar was 90%), gbt_cls -0.003 (no gain); all five Hard signs reversed. Q3 holds
+  (0.221 and 0.203, upper bounds 0.232 and 0.213). Q4 holds (+0.081). Q4r holds (+0.158). Q5 FAILS: relative position
+  alone has test ROC-AUC 0.633 / 0.618 / 0.586 (predicted <= 0.55 on every level).
+- Share of the gain over 0.5 on Hard: per-level gbt 0.570 of the true-level head's (0.696 vs 0.844) -> "roughly half to
+  two-thirds"; pooled gbt 0.353 of DeSAF's (0.615 vs 0.826) -> "a minority of the gain". Caveat: the clue models'
+  thresholds are chosen with the official metric, DeSAF's with positive-class F1, which if anything favours the clue models.
+- Allowed wording (rules in the docstring): "combining the five clues adds to the best single clue"; "on Hard the clues
+  help only when read in the reversed direction"; "a clue model fitted on Easy ranks Hard boundaries worse than chance,
+  and the reverse"; "without the level as an input, the clues lose 0.081 on Hard"; "without the level, the clue model
+  ranks Hard boundaries worse, consistent with clues that point opposite ways across levels"; with the level the clues
+  give "roughly half to two-thirds" of the true-level head's gain over chance on Hard, without it "a minority" of DeSAF's;
+  "DeSAF is 0.12 to 0.13 above the per-level clue model on Hard on every seed (paired CIs exclude 0)".
+  NOT allowed: "position in the document alone carries little signal" (Q5 failed; report AUC 0.59-0.63 instead);
+  "the clues explain DeSAF" or "DeSAF learns the clues" (not tested); "the reversal causes DeSAF's errors".
+
+---
+
 **Literature read in full, 2026-11-17 (uploaded PDFs; one reader per paper, claims checked against the text with page
 numbers).**
 
@@ -1670,6 +1743,49 @@ numbers).**
   be used"); submission via zmeeting.org/submission/icnlp2027; no parallel submission elsewhere during review. Review mode
   (anonymous or not) is not stated on the pasted page; the template has a named author block.
 
+**Literature read in full, 2026-11-17, second batch (PDFs uploaded by the user; one reader per paper, Gururangan read
+by the main session). Page numbers are PDF pages.**
+
+- Zangerle, Mayerl, Potthast, Stein (2021), "Overview of the Style Change Detection Task at PAN 2021", CLEF 2021
+  Working Notes, CEUR-WS Vol-2936 (volume from the margin stamp; no page range printed). Three subtasks: single vs
+  multiple authors, change positions between paragraphs, paragraph-to-author assignment; 16,000 StackExchange documents,
+  1 to 4 authors. Citable: documents take all paragraphs from one question/answer thread because "one of the goals for
+  this year's edition of the task was to reduce the impact of topic changes within a document, which could
+  inadvertently make the task easier" (p.4); best Task 2 F1 0.751 (Zhang et al., fine-tuned BERT). Do NOT cite it for
+  difficulty levels (none in 2021), sentence-level changes, or evidence that models exploit topic (it states a design
+  motive only).
+- Zangerle et al. (2022), "Overview of the Style Change Detection Task at PAN 2022", CLEF 2022 Working Notes, CEUR-WS
+  Vol-3180. Three subtasks; Subtask 3 is sentence level. Citable: "artificial documents are synthesized by drawing
+  paragraphs from a single question thread to ensure that topic changes cannot be exploited for detecting style changes"
+  (p.4); history 2016 (clustering) / 2017 (positions) / 2018 (single vs multi) / 2019 (number of authors) / 2020-2021
+  (paragraph level) (p.1). Do NOT cite it for difficulty levels or later editions.
+- Zangerle et al. (2023), "Overview of the Multi-Author Writing Style Analysis Task at PAN 2023", CLEF 2023 Working
+  Notes, CEUR-WS Vol-3497. Citable: earlier datasets "exhibited a high topical diversity", which "allows participants to
+  leverage topic information as a style change signal" (p.1); Reddit, three levels (easy/medium/hard), documents from
+  the paragraphs of a single Reddit post, "the paragraphs were then shuffled based on the similarity of these
+  properties" (semantic and stylistic), similarities configured "large" for easy, "moderate" for medium, "small" for hard
+  (p.3; quote, do not paraphrase the direction); hard: "All paragraphs of a document have the same topic" (p.3); best
+  hard F1 0.821 (Ye et al., DeBERTaV3 with contrastive learning); the organisers conclude "topical signals indeed mask
+  the detection of authorship style changes" from the score drops (p.5). No artifact analysis.
+- Zangerle et al. (2024), "Overview of the Multi-Author Writing Style Analysis Task at PAN 2024", CLEF 2024 Working
+  Notes. The PDF prints no volume; CEUR-WS Vol-3740, paper-222 from the CEUR listing (web search, 2026-11-17). Citable:
+  "The paragraphs are arranged based on these pair-wise paragraph similarities" (semantic and stylistic) with the same
+  large/moderate/small wording (p.2); 6,000 documents per level, 2 to 4 authors, 70/15/15; best hard F1 0.863.
+- McCoy, Pavlick, Linzen (2019), "Right for the Wrong Reasons: Diagnosing Syntactic Heuristics in Natural Language
+  Inference", Proc. ACL 2019, pp. 3428-3448. Citable: "A machine learning system can score well on a given test set by
+  relying on heuristics that are effective for frequent example types but break down in more challenging cases"
+  (abstract, p.3428); "test sets drawn from the same distribution as the training set may be inadequate for assessing
+  whether a model has learned to perform the intended task" (p.3436). Do NOT cite it for "annotation artifacts" (that is
+  Gururangan) or for below-chance accuracy overall.
+- Gururangan, Swayamdipta, Levy, Schwartz, Bowman, Smith (2018), "Annotation Artifacts in Natural Language Inference
+  Data", Proc. NAACL-HLT 2018, pp. 107-112. Citable: a hypothesis-only fastText classifier reaches 67.0% on SNLI and
+  53.9 / 52.3% on MultiNLI matched / mismatched, against majority baselines of 34.3 / 35.4 / 35.2% (Table 2, p.108);
+  the cues come from annotator strategies (negation -> contradiction, generic words -> entailment, purpose clauses ->
+  neutral; hypothesis length) (pp.108-109); "the success of natural language inference models to date has been
+  overestimated" (abstract).
+- Used in the paper (Related Work), 2026-11-17: PAN history and topic control (2021-2024 overviews), and one sentence
+  each for Gururangan (67.0% vs 34.3%) and McCoy (heuristics that fail on harder cases).
+
 **Implementation details used in the paper, confirmed from the code (not from a log), 2026-11-17:** supervised
 contrastive loss weight 0.3 and temperature 0.1 (train_deberta_fusion.py defaults, passed explicitly in the run
 scripts); function-word distance over 135 function words and punctuation distance over 11 marks
@@ -1681,6 +1797,10 @@ from 20 random sources; curriculum = Easy, then Easy + Medium, then all three le
 ---
 
 ## Still open / not yet done
+
+Added 2026-11-17:
+- DONE and verified in (Q): scripts/clue_baselines.py version 2 (clue-only and position-only baselines).
+- Literature: all papers cited in the paper are now read in full (the 2007 Koppel item below was never cited).
 
 Added 2026-11-16:
 - DONE and verified in (O): hard_error_profile.py, topic_length / topic_rawstyle constructions with construction_profile_check.py,

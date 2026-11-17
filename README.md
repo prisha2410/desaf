@@ -88,6 +88,8 @@ What this shows: the way documents are joined is enough to turn the classic clue
 
 Two more pieces fit the picture. The extra similarity sits right at the join: one or two sentences further back it is close to chance (0.283 at the join, 0.482 one and two sentences back). And PAN 2026 Hard, built with a similar kind of filter on different text, is not reversed. This fits the idea that the direction is set by how a benchmark is built, though two editions are not enough to prove it.
 
+Can the five clues alone find author changes? We trained a small tree model on just the five clues, one model per level. Under the official measure a random guess scores about 0.5. On Hard the clue model reaches 0.696, but only because it reads the clues backwards. Forced to read them the normal way it is at chance (0.497), and forced to read them reversed it keeps 0.677. A clue model trained on Easy ranks Hard boundaries far worse than chance (ROC-AUC 0.221), and one trained on Hard does the same on Easy (0.203). Trained on all levels without being told the level, the clue model drops to 0.615 on Hard. DeSAF (0.819 to 0.830 on Hard) is well above all of these. Where a boundary sits in the document also carries some signal (ROC-AUC 0.59 to 0.63), although we had predicted it would not.
+
 ## The level flag
 
 Giving the true level raises the average score from 0.865 (the same kind of head trained without the level) to 0.882. It changes how the model ranks boundaries inside a level, not only where it puts the threshold.
@@ -154,6 +156,7 @@ REAL_VERIFIED_NUMBERS.md   the full lab notebook: every checked number and its c
 | `pan_direction_followup.py`, `pan_direction_checks.py` | the same with length and topic held fixed |
 | `pan_extra_checks.py` | the lag test, clue profiles and repeated lines |
 | `length_split_check.py` | splits the length effect into placement and closeness in length |
+| `clue_baselines.py` | models that see only the five clues, or only the position, per level and without the level |
 
 **Joining text ourselves**
 
