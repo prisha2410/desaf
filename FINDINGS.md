@@ -122,14 +122,15 @@ Numbers only, no mechanism sentence (that was the rule fixed before the run).
 
 ### 2h. Can the clues alone find changes? [(Q)]
 
-**We write:** "On Hard the clue model reaches 0.696, and the clues help only when read in the reversed direction: forced to read all five the classical way, the model is at chance (0.497); forced to read them reversed, it keeps 0.677. A clue model fitted on Easy ranks Hard boundaries worse than chance (ROC-AUC 0.221), and the reverse (0.203). Without the level as an input, the clues lose 0.081 on Hard and rank Hard boundaries worse (ROC-AUC 0.685), consistent with clues that point opposite ways across levels."
+**We write:** "On Hard the clue model reaches 0.696, and the clues help only when read in the reversed direction: forced to read all five the usual way, the model is at chance (0.497); forced to read them reversed, it keeps 90% of its gain over 0.5 (0.677). A logistic clue model fitted on Easy ranks Hard boundaries below chance (ROC-AUC 0.221), and one fitted on Hard does the same on Easy (0.203). One tree model pooled over all levels, without the level, loses 0.081 on Hard (0.615) and ranks Hard boundaries worse (ROC-AUC 0.685), consistent with clues that point opposite ways across levels."
 
 - Model: gradient-boosted trees on the five clues, one per level; threshold chosen on validation with the official measure. A random guess at the change rate scores about 0.5 under that measure (0.489 / 0.492 / 0.505 in the run), above predict-0 (0.439 / 0.440 / 0.453), so gains are measured from 0.5.
 - Share of the gain over 0.5 on Hard: with the level, roughly half to two-thirds of the true-level head's (0.570); without it, a minority of DeSAF's (0.353).
 - DeSAF is 0.123 to 0.134 above the per-level clue model on Hard on every seed (paired intervals exclude 0), although only the clue model gets the level.
 - The reversed-direction model kept 90.3% of the full clue model's gain; the bar was 90%, so it passed only narrowly.
 - Relative position alone reaches ROC-AUC 0.633 / 0.618 / 0.586, but it partly encodes document length (on Hard, document length alone gives 0.614).
-- **Do not write:** "position carries little signal" (the test failed), "DeSAF learns the clues", "the clues explain DeSAF".
+- The cross-level transfer numbers come from logistic regression, not from the tree model; say so.
+- **Do not write:** "position carries little signal" (the test failed), "DeSAF learns the clues", "the clues explain DeSAF", "DeSAF does not know the level" (say "is not given the level").
 
 ## Finding 3: The level flag helps, but only when it is right
 
@@ -141,6 +142,8 @@ Numbers only, no mechanism sentence (that was the rule fixed before the run).
 - Better in 27 of 27 runs, significant after Holm in 26 of 27.
 - With per-level thresholds for both heads, the flag keeps 96-99% of its gain. It also raises within-level ROC-AUC, which no threshold can change: Hard +0.018 to +0.023 on test.
 - Lead with this controlled comparison (+0.0169), not with the gain over the original DeSAF (+0.0142), because the original never trained on validation.
+
+- **Is the level an oracle?** PAN releases each level separately and PAN 2024 systems used level-specific models, so the level is available in the shared task (not for real text). The true-level head is 0.010 / 0.008 / 0.014 above the best published score per level (0.959 / 0.825 / 0.830). **Do not write** "new state of the art": the gaps are about the size of the test-sampling intervals, the head also trains on validation, and no paired test is possible.
 
 ### 3b. Where the gain comes from [(T)]
 

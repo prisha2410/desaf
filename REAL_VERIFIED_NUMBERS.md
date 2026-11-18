@@ -1699,6 +1699,17 @@ logs_user/clue_baselines.log (results/clue_baselines.json on the user's machine)
   ranks Hard boundaries worse, consistent with clues that point opposite ways across levels"; with the level the clues
   give "roughly half to two-thirds" of the true-level head's gain over chance on Hard, without it "a minority" of DeSAF's;
   "DeSAF is 0.12 to 0.13 above the per-level clue model on Hard on every seed (paired CIs exclude 0)".
+  The transfer numbers (0.221, 0.203) come from logistic regression, not from gbt; the paper says "a logistic clue model".
+  The DeSAF - gbt intervals use 2,000 document resamples without Holm correction; the paper says so.
+  Paper check (3 lenses, 2026-11-17): every number correct; wording fixes applied (transfer model named, "is given the
+  level" instead of "knows the level", Q2 share stated as 90%, recipe groups named, PAN 2026 added to the year history).
+  Paper revision 2026-11-18 (second external review): clue results moved into Table II (old Table II, clue direction,
+  folded into the text with its validation values); abstract gains the clue-model sentence. Level flag: PAN releases
+  each level as a separate dataset and PAN 2024 systems used level-specific models (2024 overview p.3: DeBERTa for easy
+  and hard, RoBERTa for medium), so the level is available in the shared task. The true-level head (0.9688 / 0.8331 /
+  0.8440) is 0.010 / 0.008 / 0.014 above the best published score per level (stylospies 0.959, xxsu-team 0.825, wqd
+  0.830; section 10). NOT a new-best claim: gaps are about the size of DeSAF's test-sampling half-widths (0.006 / 0.010
+  / 0.009), the head also trains on the validation split, and no paired test is possible.
   NOT allowed: "position in the document alone carries little signal" (Q5 failed; report AUC 0.59-0.63 instead);
   "the clues explain DeSAF" or "DeSAF learns the clues" (not tested); "the reversal causes DeSAF's errors".
 
