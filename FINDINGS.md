@@ -201,7 +201,7 @@ Report these. They make the rest more believable.
 
 - DeSAF on Reddit constructions: random AUC at least 0.90 (got 0.809); topic-matched recipes lowest (no) [(M)].
 - Length split: P1 (0.356, just under 0.36) and P3 failed [(N)].
-- Recipes vs Hard's full pattern: no recipe met C1-C5 [(O)].
+- Correction (2026-11-19): the prediction for the extra recipes was "no full match", and it HELD [(O)]; do not list it as failed. What failed is the generic expectation in construction_experiment.py that clues a recipe does not select on stay usual or at chance (Table III: e.g. content splice reverses trigrams, length splice reverses Reddit punctuation, topic_length reverses punctuation and readability).
 - Error profile: P1 missed by one encoder (0.092 vs 0.10) [(O)].
 - Recipes: the critic's prediction for topic_rawstyle (meets C1, C2, C5) was partly wrong, and the expectation that cues a recipe does not select on stay normal failed for topic_length (punctuation and readability also reversed) [(O)].
 - Boilerplate masking: neither pre-registered sentence triggered [(O)].

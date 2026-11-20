@@ -1710,6 +1710,14 @@ logs_user/clue_baselines.log (results/clue_baselines.json on the user's machine)
   0.8440) is 0.010 / 0.008 / 0.014 above the best published score per level (stylospies 0.959, xxsu-team 0.825, wqd
   0.830; section 10). NOT a new-best claim: gaps are about the size of DeSAF's test-sampling half-widths (0.006 / 0.010
   / 0.009), the head also trains on the validation split, and no paired test is possible.
+  Final submission version 2026-11-19 (rewrite after three independent readings and a six-lens final check):
+  title 'When Authorship Clues Point the Wrong Way in Multi-Author Writing Style Change Detection' (no subtitle);
+  the paper leads with the Hard reversal; adds the masking numbers and disclosure, change-class F1 thresholds, earlier
+  variants scored on the test labels, level classifiers 76% / 85-86% / 85.4%, [CLS]-only flag gain, ULILLE 98.67% ->
+  about 0.881 on the curve, logistic coefficients on Hard training data, content-overlap ratios (trigram reversal only),
+  DeSAF Hard ROC-AUC 0.933-0.940, the post hoc look-alike-thirds ROC-AUC 0.88 vs 0.94-0.98, and cites the author's PAN
+  2026 notebook (khalasi2026sesd) in the third person. Failed-prediction list corrected: 'no full match' held; the
+  failed expectation is that unselected clues stay usual or at chance. Fresh reviewer: accept with minor revisions.
   NOT allowed: "position in the document alone carries little signal" (Q5 failed; report AUC 0.59-0.63 instead);
   "the clues explain DeSAF" or "DeSAF learns the clues" (not tested); "the reversal causes DeSAF's errors".
 
